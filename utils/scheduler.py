@@ -151,31 +151,37 @@ def init_scheduler(bot: Bot):
     )
     
     # Ertalabki motivatsiya (har kuni 07:00)
-    scheduler.add_job(
-        send_motivational_message,
-        trigger=CronTrigger(hour=7, minute=0),
-        args=[bot],
-        id="morning_motivation",
-        replace_existing=True
-    )
+    # TODO: Barcha userlar ro'yxatini olish va har biriga yuborish
+    # Hozircha o'chirilgan
+    # scheduler.add_job(
+    #     send_motivational_message,
+    #     trigger=CronTrigger(hour=7, minute=0),
+    #     args=[bot],
+    #     id="morning_motivation",
+    #     replace_existing=True
+    # )
     
     # Shanba kuni test eslatmasi (14:00)
-    scheduler.add_job(
-        send_weekly_test_reminder,
-        trigger=CronTrigger(day_of_week='sat', hour=14, minute=0),
-        args=[bot],
-        id="weekly_test_reminder",
-        replace_existing=True
-    )
+    # TODO: Barcha userlar ro'yxatini olish
+    # Hozircha o'chirilgan
+    # scheduler.add_job(
+    #     send_weekly_test_reminder,
+    #     trigger=CronTrigger(day_of_week='sat', hour=14, minute=0),
+    #     args=[bot],
+    #     id="weekly_test_reminder",
+    #     replace_existing=True
+    # )
     
     # Yakshanba kuni haftalik hisobot (18:00)
-    scheduler.add_job(
-        send_weekly_report,
-        trigger=CronTrigger(day_of_week='sun', hour=18, minute=0),
-        args=[bot],
-        id="weekly_report",
-        replace_existing=True
-    )
+    # TODO: Barcha userlar ro'yxatini olish
+    # Hozircha o'chirilgan
+    # scheduler.add_job(
+    #     send_weekly_report,
+    #     trigger=CronTrigger(day_of_week='sun', hour=18, minute=0),
+    #     args=[bot],
+    #     id="weekly_report",
+    #     replace_existing=True
+    # )
     
     scheduler.start()
     logger.info("Scheduler started successfully!")

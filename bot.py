@@ -65,7 +65,8 @@ async def main():
     
     # Schedulerni ishga tushirish
     logger.info("Scheduler initializing...")
-    init_scheduler(bot)
+    # init_scheduler(bot)  # Vaqtincha o'chirildi - keyinroq yoqamiz
+    logger.info("Scheduler disabled temporarily")
     
     # Botni ishga tushirish
     logger.info("Bot starting...")
