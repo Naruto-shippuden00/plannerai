@@ -146,7 +146,7 @@ async def check_bot_status(message: Message):
     
     # Scheduler info
     jobs = scheduler.get_jobs()
-    scheduler_status = '✅ Aktiv' if scheduler.running else '❌ Toxtagan'
+    scheduler_status = '✅ Aktiv' if scheduler.running else "❌ To'xtagan"
     
     text = f"""
 🔍 **BOT HOLATI**
