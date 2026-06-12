@@ -4,8 +4,9 @@ Admin panel - Faqat admin foydalana oladi
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
+import asyncio
 
 from utils.database import (
     get_all_users,
@@ -43,6 +44,7 @@ Quyidagi komandalar mavjud:
 📊 /stats_all - Tizim statistikasi
 👥 /users - Barcha foydalanuvchilar
 🔍 /check - Bot holatini tekshirish
+🧪 /test_reminder - Test bildirishnoma yuborish
 
 📌 Sizning admin ID: `{admin_id}`
 """
@@ -128,6 +130,9 @@ async def check_bot_status(message: Message):
         await message.answer("❌ Bu komanda faqat admin uchun!")
         return
     
+    from utils.scheduler import scheduler
+    from handlers.focus_keeper import active_notifications
+    
     bot_token = os.getenv('BOT_TOKEN')
     groq_key = os.getenv('GROQ_API_KEY')
     admin_id = os.getenv('ADMIN_USER_ID')
@@ -138,6 +143,10 @@ async def check_bot_status(message: Message):
     bot_status_groq = '✅ Mavjud' if groq_key else '❌ Yoq'
     bot_status_admin = f'✅ {admin_id}' if admin_id else '❌ Yoq'
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Scheduler info
+    jobs = scheduler.get_jobs()
+    scheduler_status = '✅ Aktiv' if scheduler.running else '❌ To'xtagan'
     
     text = f"""
 🔍 **BOT HOLATI**
@@ -154,8 +163,68 @@ BOT_TOKEN: {bot_status_token}
 GROQ_API_KEY: {bot_status_groq}
 ADMIN_USER_ID: {bot_status_admin}
 
+⏰ **Scheduler:**
+━━━━━━━━━━━━━━━━━━━━
+Status: {scheduler_status}
+Jobs: {len(jobs)} ta
+Aktiv bildirishnomalar: {len(active_notifications)} ta
+
 📅 **Vaqt:** {current_time}
 🌍 **Platform:** Railway.app
 """
     
+    if active_notifications:
+        text += "\n\n🔔 **Aktiv bildirishnomalar:**\n"
+        for user_id, data in active_notifications.items():
+            text += f"• User {user_id}: Session {data['session_id']}\n"
+    
     await message.answer(text, parse_mode="Markdown")
+
+@router.message(Command("test_reminder"))
+async def test_reminder_command(message: Message):
+    """TEST - Hozir bildirishnoma yuborish"""
+    if not is_admin(message.from_user.id):
+        await message.answer("❌ Bu komanda faqat admin uchun!")
+        return
+    
+    from utils.scheduler import send_task_reminder
+    from utils.database import get_user_tasks
+    
+    user_id = message.from_user.id
+    
+    # Foydalanuvchining birinchi vazifasini olish
+    tasks = await get_user_tasks(user_id)
+    
+    if not tasks:
+        await message.answer("❌ Sizda vazifalar yo'q! Avval vazifa qo'shing.")
+        return
+    
+    task = tasks[0]
+    
+    await message.answer(
+        f"🧪 **TEST REJIMI**\n\n"
+        f"Hozir sizga test bildirishnoma yuboriladi:\n\n"
+        f"🎯 Vazifa: {task['task_name']}\n"
+        f"📂 Kategoriya: {task['category']}\n\n"
+        f"⏱ 3 soniyadan keyin...",
+        parse_mode="Markdown"
+    )
+    
+    await asyncio.sleep(3)
+    
+    # Test reminder yuborish
+    bot = message.bot
+    await send_task_reminder(
+        bot=bot,
+        user_id=user_id,
+        task_id=task['id'],
+        task_name=task['task_name'],
+        start_time=f"{datetime.now().strftime('%H:%M')}-{(datetime.now() + timedelta(hours=1)).strftime('%H:%M')}"
+    )
+    
+    await message.answer(
+        "✅ Test bildirishnoma yuborildi!\n\n"
+        "Endi rasm yuboring va tizim qanday ishlashini ko'ring! 📸",
+        parse_mode="Markdown"
+    )
+
