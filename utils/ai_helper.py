@@ -36,41 +36,88 @@ async def generate_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
     work_end = constraints.get('work_end_time', '16:00')
     
     try:
+        # Vazifalar sonini hisoblash
+        task_count = len(tasks)
+        
+        # Har bir vazifaning ma'lumotlarini tayyorlash
+        task_details = ""
+        for task in tasks:
+            duration_hours = task.get('duration_minutes', 60) / 60
+            priority_text = {3: "🔴 Juda muhim", 2: "🟡 O'rtacha", 1: "🟢 Past"}.get(task.get('priority', 1), "🟢 Past")
+            task_details += f"\n- {task['task_name']} ({task['category']}) - {duration_hours}h - {priority_text}"
+        
         prompt = f"""
-Siz professional time management assistant sizga vazifalar va cheklovlar berilgan. 
-Optimal haftalik jadval tuzing.
+Siz professional time management AI assistant. Sizning vazifangiz - optimal, muvozanatli haftalik jadval tuzish.
 
-VAZIFALAR:
-{json.dumps(tasks, ensure_ascii=False, indent=2)}
+📋 VAZIFALAR ({task_count} ta):
+{task_details}
 
-CHEKLOVLAR:
-- Ish/Texnikum vaqti: Dushanba-Shanba, {work_start}-{work_end} (BU VAQTNI BAND QILMANG!)
-- Uyquga kamida 7-8 soat ajrating
-- Har bir vazifa uchun optimal vaqtni tanlang
-- Prioritet muhim: 3 (eng muhim), 2 (o'rta), 1 (past)
-- Dam olish vaqtini unutmang
+⚙️ CHEKLOVLAR:
+- Ish/Texnikum: Dushanba-Shanba, {work_start}-{work_end} ❌ (band qilmang!)
+- Bo'sh vaqt: {work_end} dan keyin va yakshanba kuni
+- Uyqu: 23:00-06:00 (MUHIM!)
+- Optimal ish vaqti: Har kuni 3-4 soat o'qish/mashq
 
-QOIDALAR:
-1. Ertalab 6:00-{work_start}: Morning routine, breakfast, preparation
-2. {work_start}-{work_end}: Ish/Texnikum (bu vaqtni band qilmang!)
-3. {work_end}-{work_end}+1 soat: Dam olish, kechki ovqat
-4. {work_end}+1 soat-22:00: Asosiy vazifalar (SAT, Python, Kitob)
-5. 22:00-23:00: Review, keyingi kun tayyorligi
-6. 23:00-06:00: Uyqu
-7. Yakshanba: Haftalik review va yangi hafta plani
+🎯 MAQSAD: Har bir vazifaga HAFTADA 3-5 marta vaqt ajrating!
 
-Jadval quyidagi JSON formatida bo'lsin:
+⚠️ MUHIM QOIDALAR:
+
+1. **HAR KUNGA XILMA-XILLIK:**
+   - Bir kunga BARCHA vazifalarni joylashtirmang!
+   - Har kuni 2-3 xil vazifa bo'lishi kerak
+   - Misol: Dushanba → SAT, Python | Seshanba → IELTS, Kitob | ...
+
+2. **OPTIMAL TAQSIMLASH:**
+   - Yuqori prioritetli vazifalar: haftada 4-5 marta
+   - O'rtacha prioritet: haftada 3-4 marta  
+   - Past prioritet: haftada 2-3 marta
+
+3. **VAQT ORALIG'I:**
+   - {work_end} dan keyin 1 soat dam olish
+   - Asosiy vazifalar: {work_end}+1 soat dan 22:00 gacha
+   - Har bir session: 1-2 soat
+   - Sessionlar orasida 15-30 daqiqa tanaffus
+
+4. **PRIORITET HISOBGA OLING:**
+   - Priority 3 (🔴): Eng yaxshi vaqtda (ertalab yoki kechqurun birinchi)
+   - Priority 2 (🟡): O'rtacha vaqt
+   - Priority 1 (🟢): Qolgan vaqt
+
+5. **KATEGORIYA BO'YICHA:**
+   - SAT/IELTS: Ertalab yoki kechqurun birinchi
+   - Python/Programming: Miya yangi bo'lganda
+   - Kitob: Kechqurun dam olish uchun
+   - Gym: Energiya kerak bo'lganda
+
+6. **MUVOZANAT:**
+   - Qiyin vazifadan keyin oson vazifa
+   - Mental ishdan keyin physical ish
+   - Bir xil vazifani ketma-ket 2 kunga joylashtirmang
+
+7. **YAKSHANBA:**
+   - Haftalik review: 10:00-12:00
+   - Yengil o'qish/takrorlash: 14:00-16:00
+   - Keyingi hafta plani: 17:00-18:00
+
+📊 JSON FORMAT:
 {{
     "monday": [
-        {{"time": "17:00-19:00", "task": "SAT Practice", "task_id": 1}},
-        {{"time": "19:30-21:00", "task": "Python Learning", "task_id": 2}}
+        {{"time": "17:00-18:30", "task": "SAT Math", "task_id": 1}},
+        {{"time": "19:00-20:30", "task": "Python Basics", "task_id": 2}}
+    ],
+    "tuesday": [
+        {{"time": "17:00-18:30", "task": "IELTS Speaking", "task_id": 3}},
+        {{"time": "19:00-20:00", "task": "Kitob", "task_id": 4}}
     ],
     ...
 }}
 
-MUHIM: {work_start}-{work_end} oralig'ida HECH QANDAY vazifa qo'shmang!
+⚡️ ESLATMA: 
+- Har bir vazifani HAFTADA KO'P MARTA takrorlang
+- Bir kunga hammani yig'mang, xilma-xillik yarating!
+- Faqat {work_end} dan keyingi vaqtga joylashtiring
 
-Faqat JSON javob bering, boshqa hech narsa yo'q.
+FAQAT JSON javob bering, boshqa TEXT YO'Q!
 """
         
         response = client.chat.completions.create(
@@ -100,7 +147,8 @@ Faqat JSON javob bering, boshqa hech narsa yo'q.
 
 def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
     """
-    Oddiy algoritm bilan jadval tuzish (AI ishlamasa)
+    Aqlli algoritm bilan jadval tuzish (AI ishlamasa)
+    Har kunga har xil vazifalarni taqsimlaydi
     """
     schedule = {
         "monday": [],
@@ -111,6 +159,9 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
         "saturday": [],
         "sunday": []
     }
+    
+    if not tasks:
+        return schedule
     
     # Prioritet bo'yicha saralash
     sorted_tasks = sorted(tasks, key=lambda x: x.get('priority', 1), reverse=True)
@@ -125,32 +176,66 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
     # Mavjud vaqt oralig'i (ishdan keyin)
     start_hour = work_end_hour + 1  # 1 soat dam olish
     
-    time_slots = [
+    # Har bir vazifa uchun haftalik necha marta schedule qilish kerak
+    task_frequency = {}
+    for task in sorted_tasks:
+        priority = task.get('priority', 1)
+        if priority == 3:
+            task_frequency[task['id']] = 5  # Haftada 5 marta
+        elif priority == 2:
+            task_frequency[task['id']] = 3  # Haftada 3 marta
+        else:
+            task_frequency[task['id']] = 2  # Haftada 2 marta
+    
+    # Har bir kun uchun 2-3 ta slot
+    daily_slots = [
         f"{start_hour:02d}:00-{start_hour+1:02d}:30",
-        f"{start_hour+1:02d}:30-{start_hour+3:02d}:00",
-        f"{start_hour+3:02d}:00-{start_hour+4:02d}:30"
+        f"{start_hour+2:02d}:00-{start_hour+3:02d}:30",
     ]
     
-    # Vazifalarni taqsimlash
-    task_idx = 0
-    for day in weekdays:
-        for time_slot in time_slots:
-            if task_idx >= len(sorted_tasks):
-                task_idx = 0  # Qaytadan boshla
+    # Round-robin usulida taqsimlash
+    task_assignments = {task['id']: 0 for task in sorted_tasks}  # Har bir vazifa necha marta qo'shilgani
+    
+    for day_idx, day in enumerate(weekdays):
+        # Har kuni 2 ta vazifa
+        daily_task_count = 0
+        
+        for slot in daily_slots:
+            if daily_task_count >= 2:
+                break
             
-            task = sorted_tasks[task_idx]
-            schedule[day].append({
-                "time": time_slot,
-                "task": task['task_name'],
-                "task_id": task['id']
-            })
-            task_idx += 1
+            # Eng kam qo'shilgan va frequency'ga yetmagan vazifani topish
+            best_task = None
+            min_assignments = float('inf')
+            
+            for task in sorted_tasks:
+                task_id = task['id']
+                current_assignments = task_assignments[task_id]
+                target_frequency = task_frequency[task_id]
+                
+                # Agar bu vazifa hali target frequency'ga yetmagan bo'lsa
+                if current_assignments < target_frequency:
+                    # Va eng kam qo'shilgan vazifa bo'lsa
+                    if current_assignments < min_assignments:
+                        # Va bu vazifa bugungi kundagi birinchi vazifa bilan bir xil bo'lmasa
+                        if not schedule[day] or schedule[day][0]['task_id'] != task_id:
+                            best_task = task
+                            min_assignments = current_assignments
+            
+            if best_task:
+                schedule[day].append({
+                    "time": slot,
+                    "task": best_task['task_name'],
+                    "task_id": best_task['id']
+                })
+                task_assignments[best_task['id']] += 1
+                daily_task_count += 1
     
     # Yakshanba - review va test kuni
     schedule["sunday"] = [
         {"time": "10:00-12:00", "task": "📚 Haftalik Review", "task_id": None},
-        {"time": "14:00-16:00", "task": "✅ Weekly Test", "task_id": None},
-        {"time": "16:30-18:00", "task": "📝 Keyingi hafta plani", "task_id": None}
+        {"time": "14:00-16:00", "task": "📖 Yengil o'qish", "task_id": None},
+        {"time": "17:00-18:00", "task": "📝 Keyingi hafta plani", "task_id": None}
     ]
     
     return schedule
