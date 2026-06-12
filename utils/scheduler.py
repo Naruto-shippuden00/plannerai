@@ -24,14 +24,14 @@ scheduler = AsyncIOScheduler()
 
 async def check_and_send_reminders(bot: Bot):
     """
-    Har 15 daqiqada bir marta barcha foydalanuvchilarning 
+    Har daqiqada bir marta barcha foydalanuvchilarning 
     jadvalini tekshirish va eslatma yuborish
     """
     try:
         from utils.database import get_all_users, get_user_schedule_for_today
         
         current_time = datetime.now()
-        current_day = current_time.weekday()  # 0=Monday, 6=Sunday
+        current_day = current_time.weekday()  # 0=Monday, 6=Sunday (4=Friday)
         current_hour_minute = current_time.strftime("%H:%M")
         
         logger.info(f"Checking reminders for {current_hour_minute}, day={current_day}")
@@ -50,16 +50,15 @@ async def check_and_send_reminders(bot: Bot):
                 task_name = item['task_name']
                 task_id = item['task_id']
                 
-                # Vaqt tekshiruvi (15 daqiqalik oyna ichida)
-                # Masalan: jadvalda 17:00 bo'lsa, 16:55-17:10 oralig'ida eslatma yuboriladi
-                item_time = datetime.strptime(start_time, "%H:%M").time()
-                current = current_time.time()
+                # start_time formatidan faqat boshlanish vaqtini olish
+                if '-' in start_time:
+                    actual_start = start_time.split('-')[0].strip()
+                else:
+                    actual_start = start_time.strip()
                 
-                # 5 daqiqa oldin eslatma
-                reminder_time = (datetime.combine(datetime.today(), item_time) - timedelta(minutes=5)).time()
-                
-                # Agar hozir eslatma vaqti bo'lsa
-                if reminder_time.hour == current.hour and abs(reminder_time.minute - current.minute) < 3:
+                # Agar hozirgi vaqt boshlanish vaqtiga to'g'ri kelsa
+                if actual_start == current_hour_minute:
+                    logger.info(f"Sending reminder to user {user_id} for task {task_name}")
                     await send_task_reminder(bot, user_id, task_id, task_name, start_time)
         
     except Exception as e:
@@ -301,14 +300,16 @@ def init_scheduler(bot: Bot):
     """
     Schedulerni ishga tushirish
     """
-    # Har 5 daqiqada eslatmalarni tekshirish (tezroq ishlashi uchun)
+    # HAR DAQIQADA eslatmalarni tekshirish (to'g'ri ishlashi uchun)
     scheduler.add_job(
         check_and_send_reminders,
-        trigger=CronTrigger(minute="*/5"),  # 5 daqiqada bir
+        trigger=CronTrigger(minute="*"),  # HER MINUTE!
         args=[bot],
         id="check_reminders",
         replace_existing=True
     )
+    
+    logger.info("✅ Scheduler configured: Checking reminders EVERY MINUTE")
     
     # Ertalabki motivatsiya (har kuni 07:00)
     async def send_morning_to_all(bot):
@@ -318,15 +319,6 @@ def init_scheduler(bot: Bot):
                 await send_motivational_message(bot, user['user_id'])
             except Exception as e:
                 logger.error(f"Error sending morning message to {user['user_id']}: {e}")
-    
-    # Hozircha commented - agar kerak bo'lsa uncomment qiling
-    # scheduler.add_job(
-    #     send_morning_to_all,
-    #     trigger=CronTrigger(hour=7, minute=0),
-    #     args=[bot],
-    #     id="morning_motivation",
-    #     replace_existing=True
-    # )
     
     # Shanba kuni test eslatmasi (14:00)
     async def send_test_to_all(bot):
@@ -363,7 +355,7 @@ def init_scheduler(bot: Bot):
     )
     
     scheduler.start()
-    logger.info("Scheduler started successfully!")
+    logger.info("🚀 Scheduler started successfully! Checking every minute.")
 
 def stop_scheduler():
     """Schedulerni to'xtatish"""

@@ -10,6 +10,9 @@ from aiogram.client.default import DefaultBotProperties
 from dotenv import load_dotenv
 
 from handlers import start, tasks, schedule, reminders, stats, tests, admin, settings, focus_keeper, punishments
+
+# TEST BUYRUQLARI
+from aiogram.filters import Command
 from utils.database import init_db
 from utils.ai_helper import init_ai
 from utils.scheduler import init_scheduler, stop_scheduler

@@ -4,8 +4,9 @@ Admin panel - Faqat admin foydalana oladi
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
+import asyncio
 
 from utils.database import (
     get_all_users,
@@ -99,6 +100,87 @@ async def list_users(message: Message):
     
     text = f"👥 **FOYDALANUVCHILAR** ({len(users)} ta)\n\n"
     
+    for user in users:
+        text += f"• ID: `{user['user_id']}`\n"
+        text += f"  Ism: {user.get('full_name', 'N/A')}\n"
+        text += f"  Username: @{user.get('username', 'N/A')}\n"
+        text += f"  Ro'yxatdan: {user.get('created_at', 'N/A')[:10]}\n\n"
+    
+    await message.answer(text, parse_mode="Markdown")
+
+@router.message(Command("test_reminder"))
+async def test_reminder_command(message: Message):
+    """TEST - Hozir bildirishnoma yuborish"""
+    if not is_admin(message.from_user.id):
+        await message.answer("❌ Bu komanda faqat admin uchun!")
+        return
+    
+    from utils.scheduler import send_task_reminder
+    from utils.database import get_user_tasks
+    from aiogram import Bot
+    
+    user_id = message.from_user.id
+    
+    # Foydalanuvchining birinchi vazifasini olish
+    tasks = await get_user_tasks(user_id)
+    
+    if not tasks:
+        await message.answer("❌ Sizda vazifalar yo'q! Avval vazifa qo'shing.")
+        return
+    
+    task = tasks[0]
+    
+    await message.answer(
+        f"🧪 **TEST REJIMI**\n\n"
+        f"Hozir sizga test bildirishnoma yuboriladi:\n\n"
+        f"🎯 Vazifa: {task['task_name']}\n"
+        f"📂 Kategoriya: {task['category']}\n\n"
+        f"⏱ 3 soniyadan keyin...",
+        parse_mode="Markdown"
+    )
+    
+    await asyncio.sleep(3)
+    
+    # Test reminder yuborish
+    bot = message.bot
+    await send_task_reminder(
+        bot=bot,
+        user_id=user_id,
+        task_id=task['id'],
+        task_name=task['task_name'],
+        start_time=f"{datetime.now().strftime('%H:%M')}-{(datetime.now() + timedelta(hours=1)).strftime('%H:%M')}"
+    )
+    
+    await message.answer(
+        "✅ Test bildirishnoma yuborildi!\n\n"
+        "Endi rasm yuboring va tizim qanday ishlashini ko'ring! 📸",
+        parse_mode="Markdown"
+    )
+
+@router.message(Command("check"))
+async def check_system(message: Message):
+    """Bot holatini tekshirish"""
+    if not is_admin(message.from_user.id):
+        await message.answer("❌ Bu komanda faqat admin uchun!")
+        return
+    
+    from utils.scheduler import scheduler
+    from handlers.focus_keeper import active_notifications
+    
+    jobs = scheduler.get_jobs()
+    
+    text = "🔍 **TIZIM HOLATI**\n\n"
+    text += f"✅ Bot: Ishlayapti\n"
+    text += f"✅ Scheduler: {'Aktiv' if scheduler.running else 'To'xtagan'}\n"
+    text += f"📅 Scheduled jobs: {len(jobs)} ta\n"
+    text += f"🔔 Aktiv bildirishnomalar: {len(active_notifications)} ta\n\n"
+    
+    if active_notifications:
+        text += "**Aktiv bildirishnomalar:**\n"
+        for user_id, data in active_notifications.items():
+            text += f"• User {user_id}: Session {data['session_id']}\n"
+    
+    await message.answer(text, parse_mode="Markdown")
     for i, user in enumerate(users, 1):
         username = f"@{user['username']}" if user['username'] else "Username yo'q"
         created = user['created_at'][:10] if user['created_at'] else "N/A"
