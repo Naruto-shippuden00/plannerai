@@ -22,9 +22,30 @@
 - Prioritet va davomiylikni e'tiborga oladi
 - Bepul Groq AI ishlatadi
 
+### 🎯 Focus Mode (YANGI!)
+- **Cheksiz bildirishnomalar**: Vazifa vaqti kelganda har 5 minutda eslatma
+- **Rasm orqali tasdiqlash**: Faqat rasm yuborish bilan bildirishnoma to'xtaydi
+- **Pomodoro Timer**: 1 soat fokus + 10 daqiqa tanaffus + avtomatik davom etish
+- **Nazorat tizimi**: Har 15 daqiqada fokus tekshiruvi
+- **Kamera integratsiyasi**: Foydalanuvchi ruxsati bilan tasodifiy rasm so'rash
+
+### ⚠️ Jazo Tizimi (YANGI!)
+- **Avtomatik jazolar**: Vazifa bajarilmasa yoki rasm yuborilmasa
+- **Motivatsion jazolar**: Pushup, meditatsiya, yurish va boshqalar
+- **Statistika**: Qaysi xatolar ko'proq takrorlanayotganini ko'rish
+- **Tiklash**: Jazolarni bajarish orqali ballingizni tiklash
+- **Progressni kuzatish**: Jazo tarixi va natijalar
+
+### 🗑 Vazifalarni Boshqarish (YANGI!)
+- **Vazifani o'chirish**: `/remove_vazifa_nomi` buyrug'i bilan
+- **Bajarilganlar ro'yxati**: Vazifalar o'chirilmasdan, bajarilgan deb belgilanadi
+- **Qayta faollashtirish**: Bajarilgan vazifalarni qayta ishlatish mumkin
+- **Boshqaruv paneli**: Barcha vazifalarni bir joydan ko'rish va boshqarish
+
 ### ⏰ Smart Reminders
 - Har bir vazifa vaqtida avtomatik eslatma
-- Vazifa bajarilgandan keyin rasm so'raydi
+- Focus session avtomatik boshlanadi
+- Vazifa tugaganda avtomatik tekshirish
 - 30 daqiqaga kechiktirish imkoniyati
 - Ertalabki motivatsiya xabarlari
 
@@ -194,13 +215,64 @@ python bot.py
 4. "✅ Tasdiqlash" tugmasini bosing
 5. Tayyor! Endi eslatmalar keladi!
 
-#### 3. Vazifalarni bajarish
+#### 3. Vazifalarni bajarish (Focus Mode)
 
 1. Vazifa vaqti kelganda bot eslatadi
-2. "✅ Bajarildi" tugmasini bosing
-3. Vazifa rasmini yuboring (ixtiyoriy)
-4. Qisqa izoh yozing (ixtiyoriy)
-5. Bot sizni tabriklab, statistikani yangilaydi!
+2. **CHEKSIZ BILDIRISHNOMALAR BOSHLANADI!** (har 5 minutda)
+3. Bildirishnomani to'xtatish uchun:
+   - 📸 Vazifa rasmini yuboring (kitob, dars, mashq daftari va h.k.)
+   - Rasm yuborilgandan keyin bildirishnomalar to'xtaydi
+4. **POMODORO TIMER BOSHLANDI!**
+   - 1 soat fokusda ishlaysiz
+   - Har 15 daqiqada motivatsiya xabarlari
+   - Kamera ruxsati bo'lsa, tasodifiy rasm so'raladi
+5. 1 soatdan keyin 10 daqiqa tanaffus
+6. Keyingi vazifaga avtomatik o'tish
+
+**MUHIM:** Agar rasm yubormasangiz, bildirishnomalar to'xtamaydi va jazo olasiz!
+
+#### 4. Jazolarni boshqarish
+
+1. "⚠️ Jazolarim" tugmasini bosing
+2. Faol jazolaringizni ko'ring
+3. Jazoni bajarish uchun `/complete_punishment_ID` yuboring
+4. Motivatsion vazifa (pushup, meditatsiya) beriladi
+5. Bajargandan keyin `/confirm_punishment_ID` yuboring
+6. Ballingiz tiklanadi!
+
+**Jazo turlari:**
+- ❌ Vazifani o'tkazib yuborish: 30 min qo'shimcha
+- ❌ Rasm yubormaslik: Vazifani qayta bajarish
+- ❌ Vazifani erta to'xtatish: 15 min qo'shimcha
+- ❌ Kech boshlash: Ogohlantirish
+
+#### 5. Vazifalarni o'chirish
+
+**Usul 1: Buyruq orqali**
+```
+/remove_SAT Math
+/remove_Kitob o'qish  
+/remove_Python
+```
+
+**Usul 2: Boshqaruv paneli**
+1. "🗑 Vazifalarni boshqarish" tugmasini bosing
+2. "📝 Faol vazifalar" tanlang
+3. Vazifa ID'sini ko'ring
+4. `/confirm_remove_ID` buyrug'i bilan tasdiqlang
+
+#### 6. Kamera ruxsati
+
+1. "⚙️ Sozlamalar" > "📸 Kamera sozlamalari"
+2. "✅ Ruxsat berish" tugmasini bosing
+3. Endi focus vaqtida tasodifiy rasm so'raladi
+4. Bu sizning chindan ham ishlayotganingizni tasdiqlaydi
+5. Istalgan vaqt "❌ Ruxsatni bekor qilish" mumkin
+
+**Maxfiylik:**
+- Rasmlar faqat sizning progressingiz uchun
+- Hech kim bilan baham ko'rilmaydi
+- Istalgan vaqt o'chirib qo'yishingiz mumkin
 
 #### 4. Statistikani ko'rish
 
@@ -242,6 +314,8 @@ productivity-bot/
 │   ├── tasks.py         # Vazifalar boshqaruvi
 │   ├── schedule.py      # Jadval va AI planner
 │   ├── reminders.py     # Eslatmalar va completion
+│   ├── focus_keeper.py  # Focus mode va Pomodoro (YANGI!)
+│   ├── punishments.py   # Jazo tizimi (YANGI!)
 │   ├── stats.py         # Statistika va grafik
 │   └── tests.py         # Haftalik test tizimi
 │
@@ -254,7 +328,8 @@ productivity-bot/
 │
 └── data/                # Ma'lumotlar
     ├── productivity.db  # Database (avtomatik yaratiladi)
-    ├── photos/          # Yuklangan rasmlar
+    ├── photos/          # Yuklangan rasmlar (completion)
+    ├── focus_photos/    # Focus session rasmlari (YANGI!)
     └── charts/          # Statistika grafiklari
 ```
 
@@ -362,11 +437,15 @@ Savollar yoki muammolar bo'lsa:
 - [ ] Web dashboard
 - [ ] Mobile ilova
 - [ ] Jamoa uchun shared tasks
-- [ ] Pomodoro timer
+- [x] ~~Pomodoro timer~~ ✅ Qo'shildi!
+- [x] ~~Punishment system~~ ✅ Qo'shildi!
+- [x] ~~Camera monitoring~~ ✅ Qo'shildi!
 - [ ] Habit tracking
 - [ ] Voice commands
 - [ ] Multiple languages
 - [ ] Analytics dashboard
+- [ ] Video verification
+- [ ] AI progress analysis
 
 ---
 
@@ -401,6 +480,7 @@ Muvaffaqiyat sari qadam tashlang! 💪
 ---
 
 **Yaratildi:** 2026-06-11  
-**Versiya:** 1.0.0  
+**Yangilandi:** 2026-06-12 (Focus Mode, Punishment System, Camera Monitoring)
+**Versiya:** 2.0.0  
 **Til:** Python 3.8+  
 **Platform:** Telegram

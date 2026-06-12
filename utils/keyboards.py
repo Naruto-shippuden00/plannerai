@@ -9,7 +9,8 @@ def main_menu_keyboard():
         keyboard=[
             [KeyboardButton(text="📋 Vazifalarim"), KeyboardButton(text="📅 Jadval")],
             [KeyboardButton(text="➕ Vazifa qo'shish"), KeyboardButton(text="🤖 AI Jadval")],
-            [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="✅ Bajarilganlar")],
+            [KeyboardButton(text="🎯 Focus Mode"), KeyboardButton(text="📊 Statistika")],
+            [KeyboardButton(text="🗑 Vazifalarni boshqarish"), KeyboardButton(text="⚠️ Jazolarim")],
             [KeyboardButton(text="⚙️ Sozlamalar"), KeyboardButton(text="❓ Yordam")]
         ],
         resize_keyboard=True
@@ -167,6 +168,109 @@ def back_to_main_keyboard():
             [KeyboardButton(text="🏠 Bosh menyu")]
         ],
         resize_keyboard=True
+    )
+    return keyboard
+
+# ============== YANGI KLAVIATURALAR ==============
+
+def focus_action_keyboard(session_id: int):
+    """Focus session amalllari"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⏹ To'xtatish", callback_data=f"end_focus_{session_id}")],
+            [InlineKeyboardButton(text="📊 Statistika", callback_data=f"focus_stats_{session_id}")]
+        ]
+    )
+    return keyboard
+
+def task_management_keyboard():
+    """Vazifalarni boshqarish menyusi"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📝 Faol vazifalar", callback_data="show_active_tasks")],
+            [InlineKeyboardButton(text="✅ Bajarilganlar", callback_data="show_completed_tasks")],
+            [InlineKeyboardButton(text="📊 Statistika", callback_data="task_statistics")],
+            [InlineKeyboardButton(text="🏠 Bosh menyu", callback_data="back_to_main")]
+        ]
+    )
+    return keyboard
+
+def camera_permission_keyboard(has_permission: bool):
+    """Kamera ruxsati klaviaturasi"""
+    if has_permission:
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Ruxsatni bekor qilish", callback_data="camera_revoke")],
+                [InlineKeyboardButton(text="🔙 Orqaga", callback_data="back_to_main")]
+            ]
+        )
+    else:
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✅ Ruxsat berish", callback_data="camera_grant"),
+                    InlineKeyboardButton(text="❌ Bekor qilish", callback_data="back_to_main")
+                ]
+            ]
+        )
+    return keyboard
+
+def punishment_keyboard():
+    """Jazo menyusi"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⚠️ Faol jazolar", callback_data="active_punishments")],
+            [InlineKeyboardButton(text="✅ Bajarilgan jazolar", callback_data="completed_punishments")],
+            [InlineKeyboardButton(text="📊 Statistika", callback_data="punishment_stats")],
+            [InlineKeyboardButton(text="🔙 Orqaga", callback_data="back_to_main")]
+        ]
+    )
+    return keyboard
+
+def focus_reminder_keyboard(task_id: int, session_id: int):
+    """Focus eslatmasi uchun klaviatura"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Boshlash", callback_data=f"start_focus_{session_id}")],
+            [InlineKeyboardButton(text="⏰ 5 daqiqa kechiktirish", callback_data=f"snooze_focus_{task_id}")],
+            [InlineKeyboardButton(text="❌ Bekor qilish", callback_data=f"skip_focus_{task_id}")]
+        ]
+    )
+    return keyboard
+
+def break_time_keyboard():
+    """Tanaffus vaqti klaviaturasi"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="☕️ Choy ichyapman", callback_data="break_tea")],
+            [InlineKeyboardButton(text="🚶‍♂️ Sayr qilyapman", callback_data="break_walk")],
+            [InlineKeyboardButton(text="💧 Suv ichyapman", callback_data="break_water")],
+            [InlineKeyboardButton(text="🧘‍♂️ Dam olyapman", callback_data="break_rest")]
+        ]
+    )
+    return keyboard
+
+def completion_verification_keyboard(task_id: int):
+    """Bajarish tasdiqlovchi klaviatura"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📸 Rasm yuborish", callback_data=f"submit_photo_{task_id}")],
+            [InlineKeyboardButton(text="📝 Izoh qo'shish", callback_data=f"add_notes_{task_id}")],
+            [InlineKeyboardButton(text="✅ Tayyor", callback_data=f"verify_complete_{task_id}")]
+        ]
+    )
+    return keyboard
+
+def settings_keyboard():
+    """Sozlamalar menyusi - yangilangan"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🕐 Ish vaqtini o'zgartirish", callback_data="change_work_hours")],
+            [InlineKeyboardButton(text="🌍 Vaqt mintaqasi", callback_data="change_timezone")],
+            [InlineKeyboardButton(text="📸 Kamera sozlamalari", callback_data="camera_settings")],
+            [InlineKeyboardButton(text="🔔 Bildirishnoma sozlamalari", callback_data="notification_settings")],
+            [InlineKeyboardButton(text="🔙 Orqaga", callback_data="back_to_menu")]
+        ]
     )
     return keyboard
 

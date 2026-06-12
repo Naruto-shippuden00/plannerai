@@ -6,13 +6,23 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from utils.database import add_task, get_user_tasks, delete_task
+from utils.database import (
+    add_task, 
+    get_user_tasks, 
+    delete_task, 
+    delete_task_by_name,
+    get_task_by_name,
+    mark_task_as_completed,
+    unmark_task_completion,
+    get_completed_tasks
+)
 from utils.keyboards import (
     task_category_keyboard, 
     priority_keyboard, 
     duration_keyboard,
     main_menu_keyboard,
-    task_action_keyboard
+    task_action_keyboard,
+    task_management_keyboard
 )
 
 router = Router()
@@ -206,16 +216,17 @@ async def delete_task_handler(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("complete_"))
 async def complete_task_handler(callback: CallbackQuery):
-    """Vazifani bajarilgan deb belgilash"""
+    """Vazifani bajarilgan deb belgilash (o'chirmasdan)"""
     task_id = int(callback.data.split("_")[1])
-    # Bu yerda vazifani bajarilgan deb belgilash funksiyasi kerak bo'ladi
-    # Hozircha shunchaki o'chiramiz
-    await delete_task(task_id)
+    
+    # Vazifani bajarilgan deb belgilash
+    await mark_task_as_completed(task_id)
     
     await callback.message.edit_text(
         "✅ **Ajoyib! Vazifa bajarildi!**\n\n"
         "🎉 Tabriklaymiz! Siz yana bir maqsadga erishdingiz!\n"
-        "📊 Statistika bo'limida natijalaringizni ko'ring.",
+        "📊 Vazifa bajarilgan deb belgilandi va ro'yxatda qoladi.\n\n"
+        "💡 Qayta faollashtirish uchun '📋 Vazifalarim' bo'limiga o'ting.",
         parse_mode="Markdown"
     )
     await callback.answer("🎉 Barakalla!", show_alert=True)
@@ -232,3 +243,194 @@ async def snooze_task_handler(callback: CallbackQuery):
         parse_mode="Markdown"
     )
     await callback.answer("⏰ Keyinroqqa qoldirildi")
+
+# ============== VAZIFANI O'CHIRISH TIZIMI ==============
+
+@router.message(F.text.startswith("/remove_"))
+async def remove_task_by_command(message: Message):
+    """
+    Vazifani buyruq orqali o'chirish
+    Misol: /remove_SAT Math yoki /remove_Kitob o'qish
+    """
+    # Buyruqdan vazifa nomini ajratish
+    command_text = message.text[8:]  # "/remove_" dan keyingi qism
+    
+    if not command_text or len(command_text.strip()) < 2:
+        await message.answer(
+            "❌ **Noto'g'ri format!**\n\n"
+            "Vazifa nomini kiriting:\n\n"
+            "Misol:\n"
+            "• `/remove_SAT Math`\n"
+            "• `/remove_Kitob o'qish`\n"
+            "• `/remove_Python`\n\n"
+            "Yoki '🗑 Vazifalarni boshqarish' tugmasini bosing.",
+            parse_mode="Markdown"
+        )
+        return
+    
+    task_name = command_text.strip()
+    
+    # Vazifani topish
+    task = await get_task_by_name(message.from_user.id, task_name)
+    
+    if not task:
+        await message.answer(
+            f"❌ **Vazifa topilmadi!**\n\n"
+            f"🔍 Qidirildi: `{task_name}`\n\n"
+            f"💡 Vazifaning to'g'ri nomini kiriting yoki\n"
+            f"'📋 Vazifalarim' bo'limidan ko'ring.",
+            parse_mode="Markdown"
+        )
+        return
+    
+    # Tasdiqlash
+    await message.answer(
+        f"⚠️ **Vazifani o'chirmoqchimisiz?**\n\n"
+        f"📝 Vazifa: **{task['task_name']}**\n"
+        f"📂 Kategoriya: {task['category']}\n"
+        f"⏱ Davomiyligi: {task['duration_minutes']} daqiqa\n\n"
+        f"❗️ Bu amalni bekor qilib bo'lmaydi!\n\n"
+        f"Tasdiqlash uchun buyruqni qayta kiriting:\n"
+        f"`/confirm_remove_{task['id']}`",
+        parse_mode="Markdown"
+    )
+
+@router.message(F.text.startswith("/confirm_remove_"))
+async def confirm_remove_task(message: Message):
+    """Vazifani o'chirishni tasdiqlash"""
+    try:
+        task_id = int(message.text.split("_")[2])
+        
+        # O'chirish
+        await delete_task(task_id)
+        
+        await message.answer(
+            "✅ **Vazifa o'chirildi!**\n\n"
+            "🗑 Vazifa tizimdan butunlay o'chirildi.\n\n"
+            "📋 Yangilangan ro'yxatni ko'rish uchun '📋 Vazifalarim' tugmasini bosing.",
+            parse_mode="Markdown",
+            reply_markup=main_menu_keyboard()
+        )
+        
+    except (IndexError, ValueError):
+        await message.answer(
+            "❌ **Xatolik!**\n\n"
+            "Noto'g'ri tasdiqlash buyrug'i.\n"
+            "Iltimos, qaytadan urinib ko'ring.",
+            reply_markup=main_menu_keyboard()
+        )
+
+@router.message(F.text == "🗑 Vazifalarni boshqarish")
+async def manage_tasks_menu(message: Message):
+    """Vazifalarni boshqarish menyusi"""
+    tasks = await get_user_tasks(message.from_user.id)
+    completed_tasks = await get_completed_tasks(message.from_user.id)
+    
+    if not tasks and not completed_tasks:
+        await message.answer(
+            "📋 **Sizda vazifalar yo'q**\n\n"
+            "Avval vazifa qo'shing!",
+            reply_markup=main_menu_keyboard()
+        )
+        return
+    
+    await message.answer(
+        "🗑 **VAZIFALARNI BOSHQARISH**\n\n"
+        "Bu yerda barcha vazifalaringizni ko'rishingiz va boshqarishingiz mumkin:\n\n"
+        "• ✅ Bajarilganlar\n"
+        "• 📝 Faol vazifalar\n"
+        "• 🗑 O'chirish\n"
+        "• 🔄 Qayta faollashtirish\n\n"
+        "Quyidagi bo'limlarni tanlang:",
+        parse_mode="Markdown",
+        reply_markup=task_management_keyboard()
+    )
+
+@router.callback_query(F.data == "show_active_tasks")
+async def show_active_tasks(callback: CallbackQuery):
+    """Faol vazifalarni ko'rsatish"""
+    tasks = await get_user_tasks(callback.from_user.id)
+    
+    if not tasks:
+        await callback.message.edit_text(
+            "📋 **Faol vazifalar yo'q**\n\n"
+            "Barcha vazifalar bajarilgan yoki o'chirilgan.",
+            parse_mode="Markdown"
+        )
+        await callback.answer()
+        return
+    
+    text = "📝 **FAOL VAZIFALAR**\n\n"
+    
+    for task in tasks:
+        priority_emoji = "🔴" if task['priority'] == 3 else "🟡" if task['priority'] == 2 else "🟢"
+        text += f"{priority_emoji} **{task['task_name']}**\n"
+        text += f"   📂 {task['category']} | ⏱ {task['duration_minutes']} min\n"
+        text += f"   ID: `{task['id']}`\n\n"
+    
+    text += "\n💡 O'chirish: `/remove_vazifa_nomi`"
+    
+    await callback.message.edit_text(text, parse_mode="Markdown")
+    await callback.answer()
+
+@router.callback_query(F.data == "show_completed_tasks")
+async def show_completed_tasks_cb(callback: CallbackQuery):
+    """Bajarilgan vazifalarni ko'rsatish"""
+    tasks = await get_completed_tasks(callback.from_user.id)
+    
+    if not tasks:
+        await callback.message.edit_text(
+            "✅ **Bajarilgan vazifalar yo'q**\n\n"
+            "Hali hech qanday vazifa bajarilmagan.",
+            parse_mode="Markdown"
+        )
+        await callback.answer()
+        return
+    
+    text = "✅ **BAJARILGAN VAZIFALAR**\n\n"
+    
+    for task in tasks:
+        text += f"✔️ **{task['task_name']}**\n"
+        text += f"   📂 {task['category']} | ⏱ {task['duration_minutes']} min\n"
+        
+        if task['completed_at']:
+            completed_date = datetime.fromisoformat(task['completed_at'])
+            text += f"   📅 {completed_date.strftime('%d.%m.%Y %H:%M')}\n"
+        
+        text += f"   🔄 Qayta faollashtirish: `/reactivate_{task['id']}`\n\n"
+    
+    await callback.message.edit_text(text, parse_mode="Markdown")
+    await callback.answer()
+
+@router.message(F.text.startswith("/reactivate_"))
+async def reactivate_task(message: Message):
+    """Bajarilgan vazifani qayta faollashtirish"""
+    try:
+        task_id = int(message.text.split("_")[1])
+        
+        # Vazifani qayta faollashtirish
+        await unmark_task_completion(task_id)
+        
+        await message.answer(
+            "🔄 **Vazifa qayta faollashtirildi!**\n\n"
+            "✅ Vazifa yana faol vazifalar ro'yxatiga qo'shildi.\n\n"
+            "📋 Jadvalni qayta tuzishingiz kerak bo'lishi mumkin.",
+            parse_mode="Markdown",
+            reply_markup=main_menu_keyboard()
+        )
+        
+    except (IndexError, ValueError):
+        await message.answer(
+            "❌ **Xatolik!**\n\n"
+            "Noto'g'ri buyruq formati.",
+            reply_markup=main_menu_keyboard()
+        )
+
+@router.callback_query(F.data == "back_to_main")
+async def back_to_main(callback: CallbackQuery):
+    """Asosiy menyuga qaytish"""
+    await callback.message.edit_text(
+        "🏠 Asosiy menyuga qaytdingiz.",
+        reply_markup=main_menu_keyboard()
+    )
+    await callback.answer()

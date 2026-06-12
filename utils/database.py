@@ -34,6 +34,9 @@ async def init_db():
                 priority INTEGER DEFAULT 1,
                 duration_minutes INTEGER DEFAULT 60,
                 active INTEGER DEFAULT 1,
+                completed INTEGER DEFAULT 0,
+                completed_at TEXT,
+                times_completed INTEGER DEFAULT 0,
                 created_at TEXT,
                 FOREIGN KEY (user_id) REFERENCES users (user_id)
             )
@@ -64,8 +67,68 @@ async def init_db():
                 completed_at TEXT,
                 photo_path TEXT,
                 notes TEXT,
+                focus_session_id INTEGER,
                 FOREIGN KEY (user_id) REFERENCES users (user_id),
                 FOREIGN KEY (task_id) REFERENCES tasks (id)
+            )
+        """)
+        
+        # Focus sessions - vazifa davomida fokus seanslarini kuzatish
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS focus_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                task_id INTEGER,
+                schedule_id INTEGER,
+                session_start TEXT,
+                session_end TEXT,
+                planned_duration INTEGER,
+                actual_duration INTEGER,
+                photos_submitted INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'active',
+                completed INTEGER DEFAULT 0,
+                FOREIGN KEY (user_id) REFERENCES users (user_id),
+                FOREIGN KEY (task_id) REFERENCES tasks (id),
+                FOREIGN KEY (schedule_id) REFERENCES schedule (id)
+            )
+        """)
+        
+        # Focus photos - vazifa davomida yuborilgan rasmlar
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS focus_photos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                focus_session_id INTEGER,
+                photo_path TEXT,
+                submitted_at TEXT,
+                verified INTEGER DEFAULT 0,
+                FOREIGN KEY (focus_session_id) REFERENCES focus_sessions (id)
+            )
+        """)
+        
+        # Punishments - jazo tizimi
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS punishments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                task_id INTEGER,
+                focus_session_id INTEGER,
+                punishment_type TEXT,
+                reason TEXT,
+                applied_at TEXT,
+                completed INTEGER DEFAULT 0,
+                FOREIGN KEY (user_id) REFERENCES users (user_id),
+                FOREIGN KEY (task_id) REFERENCES tasks (id),
+                FOREIGN KEY (focus_session_id) REFERENCES focus_sessions (id)
+            )
+        """)
+        
+        # Camera permissions - kamera ruxsatlari
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS camera_permissions (
+                user_id INTEGER PRIMARY KEY,
+                permission_granted INTEGER DEFAULT 0,
+                granted_at TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (user_id)
             )
         """)
         
@@ -328,7 +391,7 @@ async def update_work_hours(user_id: int, start_time: str, end_time: str):
 async def migrate_existing_users():
     """Mavjud foydalanuvchilar uchun yangi ustunlarni qo'shish"""
     async with aiosqlite.connect(DB_PATH) as db:
-        # Ustunlar mavjudligini tekshirish
+        # Users jadvali uchun ustunlar
         async with db.execute("PRAGMA table_info(users)") as cursor:
             columns = await cursor.fetchall()
             column_names = [col[1] for col in columns]
@@ -343,8 +406,38 @@ async def migrate_existing_users():
                 await db.execute("""
                     ALTER TABLE users ADD COLUMN work_end_time TEXT DEFAULT '16:00'
                 """)
+        
+        # Tasks jadvali uchun ustunlar
+        async with db.execute("PRAGMA table_info(tasks)") as cursor:
+            columns = await cursor.fetchall()
+            column_names = [col[1] for col in columns]
             
-            await db.commit()
+            if 'completed' not in column_names:
+                await db.execute("""
+                    ALTER TABLE tasks ADD COLUMN completed INTEGER DEFAULT 0
+                """)
+            
+            if 'completed_at' not in column_names:
+                await db.execute("""
+                    ALTER TABLE tasks ADD COLUMN completed_at TEXT
+                """)
+            
+            if 'times_completed' not in column_names:
+                await db.execute("""
+                    ALTER TABLE tasks ADD COLUMN times_completed INTEGER DEFAULT 0
+                """)
+        
+        # Completions jadvali uchun ustunlar
+        async with db.execute("PRAGMA table_info(completions)") as cursor:
+            columns = await cursor.fetchall()
+            column_names = [col[1] for col in columns]
+            
+            if 'focus_session_id' not in column_names:
+                await db.execute("""
+                    ALTER TABLE completions ADD COLUMN focus_session_id INTEGER
+                """)
+        
+        await db.commit()
 
 async def get_all_users() -> List[Dict]:
     """Barcha foydalanuvchilarni olish"""
@@ -370,3 +463,204 @@ async def get_user_schedule_for_today(user_id: int, day_of_week: int) -> List[Di
         """, (user_id, day_of_week)) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
+
+# ============== FOCUS SESSION FUNCTIONS ==============
+
+async def create_focus_session(user_id: int, task_id: int, schedule_id: int, planned_duration: int) -> int:
+    """Yangi focus session yaratish"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            INSERT INTO focus_sessions 
+            (user_id, task_id, schedule_id, session_start, planned_duration, status)
+            VALUES (?, ?, ?, ?, ?, 'active')
+        """, (user_id, task_id, schedule_id, datetime.now().isoformat(), planned_duration))
+        await db.commit()
+        return cursor.lastrowid
+
+async def get_active_focus_session(user_id: int) -> Optional[Dict]:
+    """Foydalanuvchining aktiv focus sessionini olish"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT fs.*, t.task_name, t.category
+            FROM focus_sessions fs
+            JOIN tasks t ON fs.task_id = t.id
+            WHERE fs.user_id = ? AND fs.status = 'active'
+            ORDER BY fs.session_start DESC
+            LIMIT 1
+        """, (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+async def end_focus_session(session_id: int, completed: bool = True):
+    """Focus sessionni yakunlash"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        session_end = datetime.now().isoformat()
+        
+        # Session boshlanish vaqtini olish
+        async with db.execute(
+            "SELECT session_start FROM focus_sessions WHERE id = ?", 
+            (session_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                start_time = datetime.fromisoformat(row[0])
+                end_time = datetime.now()
+                actual_duration = int((end_time - start_time).total_seconds() / 60)
+                
+                await db.execute("""
+                    UPDATE focus_sessions 
+                    SET session_end = ?, actual_duration = ?, status = 'completed', completed = ?
+                    WHERE id = ?
+                """, (session_end, actual_duration, 1 if completed else 0, session_id))
+                await db.commit()
+
+async def add_focus_photo(session_id: int, photo_path: str) -> int:
+    """Focus session uchun rasm qo'shish"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            INSERT INTO focus_photos (focus_session_id, photo_path, submitted_at)
+            VALUES (?, ?, ?)
+        """, (session_id, photo_path, datetime.now().isoformat()))
+        
+        # Photos_submitted sonini oshirish
+        await db.execute("""
+            UPDATE focus_sessions 
+            SET photos_submitted = photos_submitted + 1
+            WHERE id = ?
+        """, (session_id,))
+        
+        await db.commit()
+        return cursor.lastrowid
+
+async def get_focus_session_photos(session_id: int) -> List[Dict]:
+    """Focus session rasmlari"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT * FROM focus_photos 
+            WHERE focus_session_id = ?
+            ORDER BY submitted_at
+        """, (session_id,)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+# ============== PUNISHMENT FUNCTIONS ==============
+
+async def add_punishment(user_id: int, task_id: int, session_id: int, punishment_type: str, reason: str):
+    """Jazo qo'shish"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            INSERT INTO punishments 
+            (user_id, task_id, focus_session_id, punishment_type, reason, applied_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (user_id, task_id, session_id, punishment_type, reason, datetime.now().isoformat()))
+        await db.commit()
+
+async def get_user_punishments(user_id: int, completed: Optional[bool] = None) -> List[Dict]:
+    """Foydalanuvchi jazolarini olish"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        query = """
+            SELECT p.*, t.task_name
+            FROM punishments p
+            LEFT JOIN tasks t ON p.task_id = t.id
+            WHERE p.user_id = ?
+        """
+        params = [user_id]
+        
+        if completed is not None:
+            query += " AND p.completed = ?"
+            params.append(1 if completed else 0)
+        
+        query += " ORDER BY p.applied_at DESC"
+        
+        async with db.execute(query, params) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+async def mark_punishment_completed(punishment_id: int):
+    """Jazoni bajarilgan deb belgilash"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            UPDATE punishments SET completed = 1 WHERE id = ?
+        """, (punishment_id,))
+        await db.commit()
+
+# ============== CAMERA PERMISSION ==============
+
+async def set_camera_permission(user_id: int, granted: bool):
+    """Kamera ruxsatini saqlash"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            INSERT OR REPLACE INTO camera_permissions 
+            (user_id, permission_granted, granted_at)
+            VALUES (?, ?, ?)
+        """, (user_id, 1 if granted else 0, datetime.now().isoformat()))
+        await db.commit()
+
+async def get_camera_permission(user_id: int) -> bool:
+    """Kamera ruxsatini tekshirish"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("""
+            SELECT permission_granted FROM camera_permissions WHERE user_id = ?
+        """, (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            return row[0] == 1 if row else False
+
+# ============== TASK COMPLETION UPDATE ==============
+
+async def mark_task_as_completed(task_id: int):
+    """Vazifani bajarilgan deb belgilash (o'chirmasdan)"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            UPDATE tasks 
+            SET completed = 1, completed_at = ?, times_completed = times_completed + 1
+            WHERE id = ?
+        """, (datetime.now().isoformat(), task_id))
+        await db.commit()
+
+async def unmark_task_completion(task_id: int):
+    """Vazifani qayta faol qilish"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            UPDATE tasks 
+            SET completed = 0, completed_at = NULL
+            WHERE id = ?
+        """, (task_id,))
+        await db.commit()
+
+async def get_completed_tasks(user_id: int) -> List[Dict]:
+    """Bajarilgan vazifalarni olish"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT * FROM tasks 
+            WHERE user_id = ? AND completed = 1 AND active = 1
+            ORDER BY completed_at DESC
+        """, (user_id,)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+async def delete_task_by_name(user_id: int, task_name: str) -> bool:
+    """Vazifani nomi bo'yicha o'chirish"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            UPDATE tasks 
+            SET active = 0
+            WHERE user_id = ? AND LOWER(task_name) LIKE LOWER(?) AND active = 1
+        """, (user_id, f"%{task_name}%"))
+        await db.commit()
+        return cursor.rowcount > 0
+
+async def get_task_by_name(user_id: int, task_name: str) -> Optional[Dict]:
+    """Vazifani nomi bo'yicha topish"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT * FROM tasks 
+            WHERE user_id = ? AND LOWER(task_name) LIKE LOWER(?) AND active = 1
+            LIMIT 1
+        """, (user_id, f"%{task_name}%")) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
