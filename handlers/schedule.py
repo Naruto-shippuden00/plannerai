@@ -174,11 +174,22 @@ async def confirm_schedule_handler(callback: CallbackQuery):
     del user_schedules[user_id]
     
     await callback.message.edit_text(
-        f"✅ **Jadval tasdiqlandi!**\n\n"
+        f"✅ **JADVAL TASDIQLANDI!**\n\n"
         f"📊 {saved_count} ta vazifa jadvalga qo'shildi.\n\n"
-        f"⏰ Endi men sizga har bir vazifa vaqtida eslatma yuboraman!\n"
-        f"📸 Vazifani bajargandan keyin rasm yuboring.\n\n"
-        f"Jadvalingizni ko'rish uchun '📅 Jadval' tugmasini bosing.",
+        f"═══════════════════════\n\n"
+        f"🎯 **ENDI AVTOMATIK ISHLAYDI:**\n\n"
+        f"1️⃣ **Vazifa vaqti** - Aniq bildirishnoma\n"
+        f"2️⃣ **Cheksiz eslatmalar** - Har 5 daqiqada\n"
+        f"3️⃣ **Rasm yuboring** - Bildirishnomalar to'xtaydi\n"
+        f"4️⃣ **Pomodoro timer** - To'liq fokus\n"
+        f"5️⃣ **Nazorat** - Har 15 daqiqada\n"
+        f"6️⃣ **Tanaffus** - 10 daqiqa dam olish\n"
+        f"7️⃣ **Keyingi vazifa** - Avtomatik davom\n\n"
+        f"⏰ **SIZ FAQAT:**\n"
+        f"• Vazifa vaqtida rasm yuboring\n"
+        f"• Fokusda ishlang\n\n"
+        f"🤖 Qolganini men qilaman!\n\n"
+        f"📅 Jadvalingizni ko'rish: '📅 Jadval' tugmasi",
         parse_mode="Markdown"
     )
     

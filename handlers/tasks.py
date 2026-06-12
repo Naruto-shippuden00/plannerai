@@ -127,20 +127,33 @@ async def add_task_duration(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     
     await callback.message.edit_text(
-        f"✅ **Vazifa muvaffaqiyatli qo'shildi!**\n\n"
-        f"📝 Nomi: {data['task_name']}\n"
+        f"✅ **VAZIFA MUVAFFAQIYATLI QO'SHILDI!**\n\n"
+        f"📝 Nomi: **{data['task_name']}**\n"
         f"📂 Kategoriya: {data['category']}\n"
         f"⭐ Prioritet: {data['priority']}/3\n"
         f"⏱ Davomiyligi: {duration} daqiqa\n\n"
-        f"🤖 Endi 'AI Jadval' tugmasini bosing va men sizga optimal jadval tuzaman!",
+        f"═══════════════════════\n\n"
+        f"🎯 **KEYINGI QADAMLAR:**\n\n"
+        f"1️⃣ Yana vazifa qo'shing (ixtiyoriy)\n"
+        f"2️⃣ **'🤖 AI Jadval'** tugmasini bosing\n"
+        f"3️⃣ AI optimal jadval tuzadi\n"
+        f"4️⃣ Jadvalni tasdiqlang\n\n"
+        f"⏰ **KEYIN AVTOMATIK:**\n"
+        f"• Vazifa vaqti kelganda bildirishnoma\n"
+        f"• Har 5 daqiqada eslatma (rasm yuborguningizcha)\n"
+        f"• Rasm yuborish → Pomodoro timer\n"
+        f"• {duration} daqiqa fokusda ishlash\n"
+        f"• 10 daqiqa tanaffus\n"
+        f"• Keyingi vazifa avtomatik boshlanadi\n\n"
+        f"💪 **100% avtomatik nazorat!**",
         parse_mode="Markdown"
     )
     
     await callback.message.answer(
-        "Yana vazifa qo'shasizmi yoki jadval tuzamizmi?",
+        "🎯 Yana vazifa qo'shasizmi yoki jadvalni tuzamizmi?",
         reply_markup=main_menu_keyboard()
     )
-    await callback.answer()
+    await callback.answer("✅ Vazifa qo'shildi!", show_alert=False)
 
 @router.message(F.text == "📋 Vazifalarim")
 async def show_tasks(message: Message):
