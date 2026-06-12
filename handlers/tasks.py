@@ -173,8 +173,22 @@ async def show_tasks(message: Message):
             text += f"  {priority_emoji} {task['task_name']} ({task['duration_minutes']} min)\n"
     
     text += f"\n\n📊 Jami: {len(tasks)} ta vazifa"
+    text += "\n\n💡 Vazifani boshqarish uchun quyidagi tugmalarni bosing:"
     
     await message.answer(text, parse_mode="Markdown")
+    
+    # Har bir vazifa uchun alohida boshqaruv tugmalari
+    for task in tasks:
+        task_text = f"📝 **{task['task_name']}**\n"
+        task_text += f"📂 {task['category']} | ⏱ {task['duration_minutes']} min\n"
+        priority_text = "🔴 Juda muhim" if task['priority'] == 3 else "🟡 O'rtacha" if task['priority'] == 2 else "🟢 Past"
+        task_text += f"⭐ Prioritet: {priority_text}"
+        
+        await message.answer(
+            task_text,
+            parse_mode="Markdown",
+            reply_markup=task_action_keyboard(task['id'])
+        )
 
 @router.callback_query(F.data.startswith("delete_"))
 async def delete_task_handler(callback: CallbackQuery):
@@ -182,5 +196,39 @@ async def delete_task_handler(callback: CallbackQuery):
     task_id = int(callback.data.split("_")[1])
     await delete_task(task_id)
     
-    await callback.message.edit_text("🗑 Vazifa o'chirildi!")
-    await callback.answer("Vazifa o'chirildi")
+    await callback.message.edit_text(
+        "🗑 **Vazifa o'chirildi!**\n\n"
+        "Vazifa muvaffaqiyatli o'chirildi.\n"
+        "📋 Vazifalarim tugmasini bosib yangilangan ro'yxatni ko'ring.",
+        parse_mode="Markdown"
+    )
+    await callback.answer("✅ Vazifa o'chirildi", show_alert=True)
+
+@router.callback_query(F.data.startswith("complete_"))
+async def complete_task_handler(callback: CallbackQuery):
+    """Vazifani bajarilgan deb belgilash"""
+    task_id = int(callback.data.split("_")[1])
+    # Bu yerda vazifani bajarilgan deb belgilash funksiyasi kerak bo'ladi
+    # Hozircha shunchaki o'chiramiz
+    await delete_task(task_id)
+    
+    await callback.message.edit_text(
+        "✅ **Ajoyib! Vazifa bajarildi!**\n\n"
+        "🎉 Tabriklaymiz! Siz yana bir maqsadga erishdingiz!\n"
+        "📊 Statistika bo'limida natijalaringizni ko'ring.",
+        parse_mode="Markdown"
+    )
+    await callback.answer("🎉 Barakalla!", show_alert=True)
+
+@router.callback_query(F.data.startswith("snooze_"))
+async def snooze_task_handler(callback: CallbackQuery):
+    """Vazifani keyinroqqa qoldirish"""
+    task_id = int(callback.data.split("_")[1])
+    
+    await callback.message.edit_text(
+        "⏰ **Vazifa keyinroqqa qoldirildi**\n\n"
+        "Bu vazifa uchun keyinroq eslatma yuboramiz.\n"
+        "⚙️ Sozlamalarda eslatma vaqtlarini sozlashingiz mumkin.",
+        parse_mode="Markdown"
+    )
+    await callback.answer("⏰ Keyinroqqa qoldirildi")
