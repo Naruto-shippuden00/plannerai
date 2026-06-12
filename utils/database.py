@@ -345,3 +345,28 @@ async def migrate_existing_users():
                 """)
             
             await db.commit()
+
+async def get_all_users() -> List[Dict]:
+    """Barcha foydalanuvchilarni olish"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT user_id, username, full_name FROM users") as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+async def get_user_schedule_for_today(user_id: int, day_of_week: int) -> List[Dict]:
+    """
+    Foydalanuvchining bugungi jadvalini olish
+    day_of_week: 0=Monday, 6=Sunday
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT s.id, s.task_id, s.start_time, s.end_time, t.task_name
+            FROM schedule s
+            LEFT JOIN tasks t ON s.task_id = t.id
+            WHERE s.user_id = ? AND s.day_of_week = ? AND s.active = 1
+            ORDER BY s.start_time
+        """, (user_id, day_of_week)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
