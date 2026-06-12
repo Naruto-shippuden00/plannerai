@@ -132,6 +132,13 @@ async def check_bot_status(message: Message):
     groq_key = os.getenv('GROQ_API_KEY')
     admin_id = os.getenv('ADMIN_USER_ID')
     
+    # Bot ma'lumotlarini olish
+    bot_info = await message.bot.get_me()
+    bot_status_token = '✅ Mavjud' if bot_token else '❌ Yoq'
+    bot_status_groq = '✅ Mavjud' if groq_key else '❌ Yoq'
+    bot_status_admin = f'✅ {admin_id}' if admin_id else '❌ Yoq'
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
     text = f"""
 🔍 **BOT HOLATI**
 
@@ -139,15 +146,15 @@ async def check_bot_status(message: Message):
 ━━━━━━━━━━━━━━━━━━━━
 Status: ✅ Ishlayapti
 Bot ID: `{message.bot.id}`
-Username: @{(await message.bot.get_me()).username}
+Username: @{bot_info.username}
 
 🔑 **Konfiguratsiya:**
 ━━━━━━━━━━━━━━━━━━━━
-BOT_TOKEN: {'✅ Mavjud' if bot_token else '❌ Yo\'q'}
-GROQ_API_KEY: {'✅ Mavjud' if groq_key else '❌ Yo\'q'}
-ADMIN_USER_ID: {'✅ ' + admin_id if admin_id else '❌ Yo\'q'}
+BOT_TOKEN: {bot_status_token}
+GROQ_API_KEY: {bot_status_groq}
+ADMIN_USER_ID: {bot_status_admin}
 
-📅 **Vaqt:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+📅 **Vaqt:** {current_time}
 🌍 **Platform:** Railway.app
 """
     
