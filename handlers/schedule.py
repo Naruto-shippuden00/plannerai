@@ -246,8 +246,29 @@ async def show_day_schedule(message: Message, day: int):
 async def navigate_day(callback: CallbackQuery):
     """Kunlar orasida navigatsiya"""
     day = int(callback.data.split("_")[1])
-    await callback.message.edit_text("Yuklanmoqda...")
-    await show_day_schedule(callback.message, day)
+    user_id = callback.from_user.id
+    schedule = await get_schedule(user_id, day)
+    
+    day_names = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", 
+                 "Juma", "Shanba", "Yakshanba"]
+    
+    if not schedule:
+        text = f"📅 **{day_names[day]}**\n\n❌ Bu kun uchun jadval yo'q."
+    else:
+        text = f"📅 **{day_names[day]}**\n\n"
+        for item in schedule:
+            emoji = "📚" if item['category'] == "SAT" else \
+                    "🐍" if item['category'] == "Python" else \
+                    "📖" if item['category'] == "Kitob" else "📌"
+            
+            text += f"{emoji} **{item['start_time']} - {item['end_time']}**\n"
+            text += f"   {item['task_name']}\n\n"
+    
+    await callback.message.edit_text(
+        text,
+        parse_mode="Markdown",
+        reply_markup=day_navigation_keyboard(day)
+    )
     await callback.answer()
 
 @router.message(F.text.startswith("/schedule"))
