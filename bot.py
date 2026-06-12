@@ -9,7 +9,7 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from dotenv import load_dotenv
 
-from handlers import start, tasks, schedule, reminders, stats, tests, admin
+from handlers import start, tasks, schedule, reminders, stats, tests, admin, settings
 from utils.database import init_db
 from utils.ai_helper import init_ai
 from utils.scheduler import init_scheduler, stop_scheduler
@@ -58,6 +58,7 @@ async def main():
     # Routerlarni qo'shish
     dp.include_router(start.router)
     dp.include_router(admin.router)  # Admin birinchi bo'lishi kerak
+    dp.include_router(settings.router)
     dp.include_router(tasks.router)
     dp.include_router(schedule.router)
     dp.include_router(reminders.router)

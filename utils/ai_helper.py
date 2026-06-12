@@ -22,7 +22,7 @@ async def generate_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
     
     Args:
         tasks: Vazifalar ro'yxati [{"name": "SAT", "duration": 120, "priority": 3, ...}]
-        constraints: Cheklovlar {"work_hours": [8, 16], "work_days": [0,1,2,3,4,5], ...}
+        constraints: Cheklovlar {"work_hours": [8, 16], "work_start_time": "08:00", "work_end_time": "16:00", ...}
     
     Returns:
         Jadval: {"monday": [...], "tuesday": [...], ...}
@@ -30,6 +30,10 @@ async def generate_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
     if not client:
         # Agar AI ishlamasa, oddiy algoritm
         return generate_simple_schedule(tasks, constraints)
+    
+    # Vaqtlarni olish
+    work_start = constraints.get('work_start_time', '08:00')
+    work_end = constraints.get('work_end_time', '16:00')
     
     try:
         prompt = f"""
@@ -40,17 +44,17 @@ VAZIFALAR:
 {json.dumps(tasks, ensure_ascii=False, indent=2)}
 
 CHEKLOVLAR:
-- Texnikum: Dushanba-Shanba, 08:00-16:00
+- Ish/Texnikum vaqti: Dushanba-Shanba, {work_start}-{work_end} (BU VAQTNI BAND QILMANG!)
 - Uyquga kamida 7-8 soat ajrating
 - Har bir vazifa uchun optimal vaqtni tanlang
 - Prioritet muhim: 3 (eng muhim), 2 (o'rta), 1 (past)
 - Dam olish vaqtini unutmang
 
 QOIDALAR:
-1. Ertalab 6:00-8:00: Morning routine, breakfast, preparation
-2. 08:00-16:00: Texnikum (bu vaqtni band qilmang)
-3. 16:00-17:00: Dam olish, kechki ovqat
-4. 17:00-22:00: Asosiy vazifalar (SAT, Python, Kitob)
+1. Ertalab 6:00-{work_start}: Morning routine, breakfast, preparation
+2. {work_start}-{work_end}: Ish/Texnikum (bu vaqtni band qilmang!)
+3. {work_end}-{work_end}+1 soat: Dam olish, kechki ovqat
+4. {work_end}+1 soat-22:00: Asosiy vazifalar (SAT, Python, Kitob)
 5. 22:00-23:00: Review, keyingi kun tayyorligi
 6. 23:00-06:00: Uyqu
 7. Yakshanba: Haftalik review va yangi hafta plani
@@ -63,6 +67,8 @@ Jadval quyidagi JSON formatida bo'lsin:
     ],
     ...
 }}
+
+MUHIM: {work_start}-{work_end} oralig'ida HECH QANDAY vazifa qo'shmang!
 
 Faqat JSON javob bering, boshqa hech narsa yo'q.
 """
@@ -112,11 +118,17 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
     # Haftaning kunlari
     weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
     
-    # Mavjud vaqt oralig'i (texnikumdan keyin)
+    # Ish vaqtidan keyin boshlanish vaqtini hisoblash
+    work_end = constraints.get('work_end_time', '16:00')
+    work_end_hour = int(work_end.split(':')[0])
+    
+    # Mavjud vaqt oralig'i (ishdan keyin)
+    start_hour = work_end_hour + 1  # 1 soat dam olish
+    
     time_slots = [
-        "17:00-18:30",
-        "18:30-20:00",
-        "20:00-21:30"
+        f"{start_hour:02d}:00-{start_hour+1:02d}:30",
+        f"{start_hour+1:02d}:30-{start_hour+3:02d}:00",
+        f"{start_hour+3:02d}:00-{start_hour+4:02d}:30"
     ]
     
     # Vazifalarni taqsimlash

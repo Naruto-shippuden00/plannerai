@@ -10,7 +10,8 @@ from utils.database import (
     get_user_tasks, 
     get_schedule, 
     add_schedule_item,
-    clear_schedule
+    clear_schedule,
+    get_user_settings
 )
 from utils.ai_helper import generate_schedule
 from utils.keyboards import (
@@ -38,6 +39,11 @@ async def generate_ai_schedule(message: Message):
         )
         return
     
+    # Foydalanuvchi sozlamalarini olish
+    settings = await get_user_settings(user_id)
+    work_start = settings.get('work_start_time', '08:00')
+    work_end = settings.get('work_end_time', '16:00')
+    
     # Loading message
     loading_msg = await message.answer(
         "🤖 AI jadval tuzmoqda...\n\n"
@@ -46,8 +52,14 @@ async def generate_ai_schedule(message: Message):
     )
     
     # AI bilan jadval generatsiya
+    # Vaqtni soat va daqiqaga ajratish
+    work_start_hour = int(work_start.split(':')[0])
+    work_end_hour = int(work_end.split(':')[0])
+    
     constraints = {
-        "work_hours": [8, 16],
+        "work_hours": [work_start_hour, work_end_hour],
+        "work_start_time": work_start,
+        "work_end_time": work_end,
         "work_days": [0, 1, 2, 3, 4, 5],  # Dushanba-Shanba
         "sleep_hours": [23, 6],
         "priority_focused": True
@@ -62,8 +74,8 @@ async def generate_ai_schedule(message: Message):
         
         await loading_msg.edit_text(
             f"✅ **Jadval tayyor!**\n\n{schedule_text}\n\n"
-            "Bu jadval sizning prioritetlaringiz va texnikum vaqtingizni "
-            "hisobga olgan holda tuzildi.\n\n"
+            f"Bu jadval sizning prioritetlaringiz va ish vaqtingizni "
+            f"({work_start}-{work_end}) hisobga olgan holda tuzildi.\n\n"
             "**Tasdiqlaysizmi?**",
             parse_mode="Markdown",
             reply_markup=confirm_schedule_keyboard()
