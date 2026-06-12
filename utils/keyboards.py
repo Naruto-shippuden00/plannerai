@@ -10,7 +10,7 @@ def main_menu_keyboard():
             [KeyboardButton(text="📋 Vazifalarim"), KeyboardButton(text="📅 Jadval")],
             [KeyboardButton(text="➕ Vazifa qo'shish"), KeyboardButton(text="🤖 AI Jadval")],
             [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="✅ Bajarilganlar")],
-            [KeyboardButton(text="❓ Yordam")]
+            [KeyboardButton(text="⚙️ Sozlamalar"), KeyboardButton(text="❓ Yordam")]
         ],
         resize_keyboard=True
     )
@@ -148,3 +148,25 @@ def yes_no_keyboard(action: str):
         ]
     )
     return keyboard
+
+def settings_keyboard():
+    """Sozlamalar menyusi"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🕐 Ish vaqtini o'zgartirish", callback_data="change_work_hours")],
+            [InlineKeyboardButton(text="🌍 Vaqt mintaqasi", callback_data="change_timezone")],
+            [InlineKeyboardButton(text="🔙 Orqaga", callback_data="back_to_menu")]
+        ]
+    )
+    return keyboard
+
+def back_to_main_keyboard():
+    """Asosiy menyuga qaytish"""
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🏠 Bosh menyu")]
+        ],
+        resize_keyboard=True
+    )
+    return keyboard
+

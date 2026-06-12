@@ -124,3 +124,13 @@ async def back_to_menu(callback: CallbackQuery):
         reply_markup=main_menu_keyboard()
     )
     await callback.answer()
+
+@router.message(F.text == "🏠 Bosh menyu")
+async def back_to_main(message: Message, state: FSMContext):
+    """Bosh menyuga qaytish"""
+    await state.clear()  # Barcha state'larni tozalash
+    await message.answer(
+        "🏠 Bosh menyu\n\nQuyidagi tugmalardan birini tanlang:",
+        reply_markup=main_menu_keyboard()
+    )
+

@@ -18,7 +18,9 @@ async def init_db():
                 username TEXT,
                 full_name TEXT,
                 created_at TEXT,
-                timezone TEXT DEFAULT 'Asia/Tashkent'
+                timezone TEXT DEFAULT 'Asia/Tashkent',
+                work_start_time TEXT DEFAULT '08:00',
+                work_end_time TEXT DEFAULT '16:00'
             )
         """)
         
@@ -81,6 +83,9 @@ async def init_db():
         """)
         
         await db.commit()
+    
+    # Mavjud foydalanuvchilar uchun migration
+    await migrate_existing_users()
 
 async def add_user(user_id: int, username: str, full_name: str):
     """Yangi foydalanuvchi qo'shish"""
@@ -291,3 +296,52 @@ async def get_system_stats() -> Dict:
             'total_completions': total_completions,
             'top_category': top_category
         }
+
+async def get_user_settings(user_id: int) -> Dict:
+    """Foydalanuvchi sozlamalarini olish"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT work_start_time, work_end_time, timezone
+            FROM users
+            WHERE user_id = ?
+        """, (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return dict(row)
+            return {
+                'work_start_time': '08:00',
+                'work_end_time': '16:00',
+                'timezone': 'Asia/Tashkent'
+            }
+
+async def update_work_hours(user_id: int, start_time: str, end_time: str):
+    """Foydalanuvchi ish vaqtini yangilash"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            UPDATE users
+            SET work_start_time = ?, work_end_time = ?
+            WHERE user_id = ?
+        """, (start_time, end_time, user_id))
+        await db.commit()
+
+async def migrate_existing_users():
+    """Mavjud foydalanuvchilar uchun yangi ustunlarni qo'shish"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Ustunlar mavjudligini tekshirish
+        async with db.execute("PRAGMA table_info(users)") as cursor:
+            columns = await cursor.fetchall()
+            column_names = [col[1] for col in columns]
+            
+            # Agar yangi ustunlar yo'q bo'lsa, qo'shamiz
+            if 'work_start_time' not in column_names:
+                await db.execute("""
+                    ALTER TABLE users ADD COLUMN work_start_time TEXT DEFAULT '08:00'
+                """)
+            
+            if 'work_end_time' not in column_names:
+                await db.execute("""
+                    ALTER TABLE users ADD COLUMN work_end_time TEXT DEFAULT '16:00'
+                """)
+            
+            await db.commit()
