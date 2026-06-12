@@ -27,7 +27,16 @@ def is_admin(user_id: int) -> bool:
 async def admin_panel(message: Message):
     """Admin panel"""
     if not is_admin(message.from_user.id):
-        await message.answer("❌ Bu komanda faqat admin uchun!")
+        # Debug ma'lumot
+        admin_id_env = os.getenv('ADMIN_USER_ID')
+        await message.answer(
+            f"❌ Bu komanda faqat admin uchun!\n\n"
+            f"🔍 Debug:\n"
+            f"Sizning ID: `{message.from_user.id}`\n"
+            f"Admin ID (.env): `{admin_id_env}`\n"
+            f"Match: {str(message.from_user.id) == str(admin_id_env)}",
+            parse_mode="Markdown"
+        )
         return
     
     text = """
