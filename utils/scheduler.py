@@ -3,6 +3,7 @@ APScheduler - avtomatik eslatmalar
 """
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 from datetime import datetime, timedelta
 from aiogram import Bot
 import logging
@@ -24,7 +25,7 @@ scheduler = AsyncIOScheduler()
 
 async def check_and_send_reminders(bot: Bot):
     """
-    Har 15 daqiqada bir marta barcha foydalanuvchilarning 
+    Har 1 daqiqada barcha foydalanuvchilarning 
     jadvalini tekshirish va eslatma yuborish
     """
     try:
@@ -32,9 +33,10 @@ async def check_and_send_reminders(bot: Bot):
         
         current_time = datetime.now()
         current_day = current_time.weekday()  # 0=Monday, 6=Sunday
-        current_hour_minute = current_time.strftime("%H:%M")
+        current_hour = current_time.hour
+        current_minute = current_time.minute
         
-        logger.info(f"Checking reminders for {current_hour_minute}, day={current_day}")
+        logger.info(f"⏰ Checking reminders at {current_hour:02d}:{current_minute:02d}, day={current_day}")
         
         # Barcha foydalanuvchilarni olish
         users = await get_all_users()
@@ -50,17 +52,26 @@ async def check_and_send_reminders(bot: Bot):
                 task_name = item['task_name']
                 task_id = item['task_id']
                 
-                # Vaqt tekshiruvi (15 daqiqalik oyna ichida)
-                # Masalan: jadvalda 17:00 bo'lsa, 16:55-17:10 oralig'ida eslatma yuboriladi
-                item_time = datetime.strptime(start_time, "%H:%M").time()
-                current = current_time.time()
-                
-                # 5 daqiqa oldin eslatma
-                reminder_time = (datetime.combine(datetime.today(), item_time) - timedelta(minutes=5)).time()
-                
-                # Agar hozir eslatma vaqti bo'lsa
-                if reminder_time.hour == current.hour and abs(reminder_time.minute - current.minute) < 3:
-                    await send_task_reminder(bot, user_id, task_id, task_name, start_time)
+                # Vaqtni parse qilish
+                try:
+                    if '-' in start_time:
+                        # Format: "17:00 - 18:00" yoki "17:00-18:00"
+                        time_parts = start_time.split('-')
+                        item_time_str = time_parts[0].strip()
+                    else:
+                        # Format: "17:00"
+                        item_time_str = start_time.strip()
+                    
+                    item_hour, item_minute = map(int, item_time_str.split(':'))
+                    
+                    # ANIQ VAQT TEKSHIRUVI - ± 0 daqiqa
+                    if item_hour == current_hour and item_minute == current_minute:
+                        logger.info(f"🔔 MATCH! Sending reminder to user {user_id} for task '{task_name}' at {item_time_str}")
+                        await send_task_reminder(bot, user_id, task_id, task_name, start_time)
+                    
+                except Exception as e:
+                    logger.error(f"Error parsing time '{start_time}' for task {task_id}: {e}")
+                    continue
         
     except Exception as e:
         logger.error(f"Reminder check error: {e}", exc_info=True)
@@ -70,11 +81,20 @@ async def send_task_reminder(bot: Bot, user_id: int, task_id: int, task_name: st
     Vazifa eslatmasini yuborish va focus sessionni boshlash
     """
     try:
-        from utils.database import create_focus_session
+        from utils.database import create_focus_session, get_task_by_id
+        from aiogram.fsm.context import FSMContext
+        from aiogram.fsm.storage.base import StorageKey
+        from handlers.focus_keeper import FocusState
+        
+        # Task ma'lumotlarini olish
+        task = await get_task_by_id(task_id)
+        if not task:
+            logger.error(f"Task {task_id} not found")
+            return
         
         # Start_time formatidan end_time ni olish
         end_time = "N/A"
-        duration_minutes = 60  # default
+        duration_minutes = task.get('duration_minutes', 60)
         
         if '-' in start_time:
             time_parts = start_time.split('-')
@@ -87,21 +107,38 @@ async def send_task_reminder(bot: Bot, user_id: int, task_id: int, task_name: st
                 end_h, end_m = map(int, end_time.split(':'))
                 duration_minutes = (end_h * 60 + end_m) - (start_h * 60 + start_m)
             except:
-                duration_minutes = 60
+                pass
         else:
             start_time_only = start_time
+            # Vazifa davomiyligidan end_time ni hisoblash
+            try:
+                start_h, start_m = map(int, start_time_only.split(':'))
+                end_minutes = start_h * 60 + start_m + duration_minutes
+                end_h = (end_minutes // 60) % 24
+                end_m = end_minutes % 60
+                end_time = f"{end_h:02d}:{end_m:02d}"
+            except:
+                end_time = "N/A"
         
         # Focus session yaratish
         session_id = await create_focus_session(
             user_id=user_id,
             task_id=task_id,
-            schedule_id=0,  # Buni keyinroq sozlashingiz mumkin
+            schedule_id=0,
             planned_duration=duration_minutes
         )
+        
+        # FSM state o'rnatish - MUHIM!
+        from bot import dp
+        storage_key = StorageKey(bot_id=bot.id, chat_id=user_id, user_id=user_id)
+        state = FSMContext(storage=dp.storage, key=storage_key)
+        await state.set_state(FocusState.waiting_for_photo)
+        await state.update_data(session_id=session_id, task_id=task_id, task_name=task_name)
         
         message = (
             f"⏰ **VAZIFA VAQTI KELDI!**\n\n"
             f"🎯 **{task_name}**\n"
+            f"📂 Kategoriya: {task.get('category', 'N/A')}\n"
             f"🕐 Boshlanish: {start_time_only}\n"
             f"⏰ Tugash: {end_time}\n"
             f"⏱ Davomiyligi: {duration_minutes} daqiqa\n\n"
@@ -110,10 +147,11 @@ async def send_task_reminder(bot: Bot, user_id: int, task_id: int, task_name: st
             f"🛑 **TO'XTATISH UCHUN:**\n"
             f"📸 Vazifani bajarayotganingizni tasdiqlovchi RASM yuboring!\n\n"
             f"**Rasm misollari:**\n"
-            f"• Dars jarayoningiz\n"
-            f"• Mashq daftaringiz\n"
-            f"• Ish statingiz\n"
-            f"• O'qiyotgan kitobingiz\n\n"
+            f"• Dars jarayoni (SAT, IELTS)\n"
+            f"• Kod yozayotgan ekran (Python)\n"
+            f"• Mashq daftari (Study)\n"
+            f"• O'qiyotgan kitob sahifasi\n"
+            f"• Gym mashqi jarayoni\n\n"
             f"⚠️ Rasm yubormasangiz, bildirishnomalar DAVOM ETADI!\n\n"
             f"💪 Fokusga kiring va muvaffaqiyatga erishing!"
         )
@@ -142,7 +180,7 @@ async def send_task_reminder(bot: Bot, user_id: int, task_id: int, task_name: st
                 end_hour, end_min = map(int, end_time.split(':'))
                 
                 today = datetime.now()
-                end_datetime = today.replace(hour=end_hour, minute=end_min, second=0)
+                end_datetime = today.replace(hour=end_hour, minute=end_min, second=0, microsecond=0)
                 
                 # Agar vaqt o'tib ketgan bo'lsa, ertaga qo'shamiz
                 if end_datetime < datetime.now():
@@ -162,7 +200,7 @@ async def send_task_reminder(bot: Bot, user_id: int, task_id: int, task_name: st
             logger.error(f"Error scheduling completion reminder: {e}")
         
     except Exception as e:
-        logger.error(f"Error sending reminder to {user_id}: {e}")
+        logger.error(f"Error sending reminder to {user_id}: {e}", exc_info=True)
 
 async def send_focus_keeper(bot: Bot, user_id: int, task_name: str):
     """
@@ -301,14 +339,16 @@ def init_scheduler(bot: Bot):
     """
     Schedulerni ishga tushirish
     """
-    # Har 5 daqiqada eslatmalarni tekshirish (tezroq ishlashi uchun)
+    # Har 1 daqiqada eslatmalarni tekshirish (aniq vaqtni ushlab olish uchun)
     scheduler.add_job(
         check_and_send_reminders,
-        trigger=CronTrigger(minute="*/5"),  # 5 daqiqada bir
+        trigger=CronTrigger(minute="*"),  # Har bir daqiqada
         args=[bot],
         id="check_reminders",
         replace_existing=True
     )
+    
+    logger.info("✅ Reminder checker started - running every 1 minute")
     
     # Ertalabki motivatsiya (har kuni 07:00)
     async def send_morning_to_all(bot):
@@ -363,7 +403,7 @@ def init_scheduler(bot: Bot):
     )
     
     scheduler.start()
-    logger.info("Scheduler started successfully!")
+    logger.info("🚀 Scheduler started successfully!")
 
 def stop_scheduler():
     """Schedulerni to'xtatish"""

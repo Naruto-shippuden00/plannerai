@@ -182,7 +182,7 @@ async def stop_continuous_notifications(user_id: int):
         logger.info(f"Continuous notifications stopped for user {user_id}")
 
 @router.message(FocusState.waiting_for_photo, F.photo)
-async def receive_focus_photo(message: Message, state: FSMContext, bot):
+async def receive_focus_photo(message: Message, state: FSMContext):
     """
     Focus vaqtida rasm qabul qilish - bildirishnomalarni to'xtatadi
     """
@@ -209,7 +209,7 @@ async def receive_focus_photo(message: Message, state: FSMContext, bot):
     photo_path = os.path.join(photo_dir, file_name)
     
     try:
-        await bot.download(photo.file_id, photo_path)
+        await message.bot.download(photo.file_id, photo_path)
         
         # Rasmni bazaga saqlash
         await add_focus_photo(active_session['id'], photo_path)
@@ -227,8 +227,8 @@ async def receive_focus_photo(message: Message, state: FSMContext, bot):
             parse_mode="Markdown"
         )
         
-        # Pomodoro timerni boshlash (keyingi task)
-        await start_pomodoro_session(bot, user_id, active_session)
+        # Pomodoro timerni boshlash
+        await start_pomodoro_session(message.bot, user_id, active_session)
         
         await state.clear()
         
@@ -252,13 +252,13 @@ async def wrong_content_during_focus(message: Message):
 
 async def start_pomodoro_session(bot, user_id: int, session_data: dict):
     """
-    Pomodoro timer - 1 soat focus + 10 daqiqa break
+    Pomodoro timer - 1 soat focus + har 15 daqiqada nazorat
     """
     session_id = session_data['id']
     task_name = session_data['task_name']
     planned_duration = session_data['planned_duration']
     
-    logger.info(f"Starting Pomodoro session for user {user_id}, session {session_id}")
+    logger.info(f"Starting Pomodoro session for user {user_id}, session {session_id}, duration {planned_duration} min")
     
     # Darhol xabar yuborish
     await bot.send_message(
@@ -274,14 +274,16 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
     )
     
     # Har 15 daqiqada focus keeper xabarlari
-    focus_intervals = [15, 30, 45]  # daqiqalar
+    # Lekin faqat planned_duration ichida
+    check_intervals = []
+    for interval in range(15, planned_duration, 15):
+        check_intervals.append(interval)
     
-    for interval in focus_intervals:
-        if interval < planned_duration:
-            # interval daqiqadan keyin xabar yuborish uchun task yaratish
-            asyncio.create_task(
-                send_pomodoro_check(bot, user_id, task_name, interval, session_id)
-            )
+    # Har bir intervalda nazorat qilish
+    for interval in check_intervals:
+        asyncio.create_task(
+            send_pomodoro_check(bot, user_id, task_name, interval, session_id)
+        )
     
     # Asosiy timer - vazifa tugaganda
     asyncio.create_task(
@@ -289,7 +291,7 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
     )
 
 async def send_pomodoro_check(bot, user_id: int, task_name: str, after_minutes: int, session_id: int):
-    """Pomodoro davomida tekshirish xabarlari"""
+    """Pomodoro davomida tekshirish xabarlari - har 15 daqiqada"""
     await asyncio.sleep(after_minutes * 60)  # Kutish
     
     # Session hali ham aktiv ekanligini tekshirish
@@ -297,29 +299,31 @@ async def send_pomodoro_check(bot, user_id: int, task_name: str, after_minutes: 
     if not active or active['id'] != session_id:
         return
     
-    messages = {
-        15: f"💪 **15 DAQIQA O'TDI!**\n\n"
-            f"🎯 {task_name}\n\n"
-            f"Zo'r ishlamoqdasiz! Davom eting!\n"
-            f"Fokusda qoling! 🔥",
+    # Har bir 15 daqiqa uchun turli xabarlar
+    message_variants = [
+        f"💪 **{after_minutes} DAQIQA O'TDI!**\n\n"
+        f"🎯 {task_name}\n\n"
+        f"Zo'r ishlamoqdasiz! Davom eting!\n"
+        f"Fokusda qoling! 🔥",
         
-        30: f"🔥 **YARIM SOAT!**\n\n"
-            f"🎯 {task_name}\n\n"
-            f"Ajoyib! Siz juda yaxshi ishlayapsiz!\n"
-            f"Yana 30 daqiqa! 💪",
+        f"🔥 **{after_minutes} MIN!**\n\n"
+        f"🎯 {task_name}\n\n"
+        f"Ajoyib! Siz juda yaxshi ishlayapsiz!\n"
+        f"💪 Intiling!",
         
-        45: f"⚡️ **45 DAQIQA!**\n\n"
-            f"🎯 {task_name}\n\n"
-            f"Zo'r! Deyarli tugadik!\n"
-            f"Oxirgi 15 daqiqa! Qani endi! 🚀"
-    }
+        f"⚡️ **{after_minutes} DAQIQA!**\n\n"
+        f"🎯 {task_name}\n\n"
+        f"Zo'r! Keep going!\n"
+        f"Maqsadga yetib boramiz! 🚀"
+    ]
     
-    message = messages.get(after_minutes, f"⏱ {after_minutes} daqiqa o'tdi!")
+    import random
+    message = random.choice(message_variants)
     
     try:
-        # Kamera tekshiruvi (agar ruxsat bo'lsa)
+        # Kamera tekshiruvi (agar ruxsat bo'lsa va 30 daqiqada bir)
         has_camera = await get_camera_permission(user_id)
-        if has_camera and after_minutes == 30:
+        if has_camera and after_minutes % 30 == 0:
             await bot.send_message(
                 user_id,
                 f"{message}\n\n"
@@ -328,6 +332,8 @@ async def send_pomodoro_check(bot, user_id: int, task_name: str, after_minutes: 
             )
         else:
             await bot.send_message(user_id, message, parse_mode="Markdown")
+        
+        logger.info(f"Pomodoro check sent at {after_minutes} min for user {user_id}")
     except Exception as e:
         logger.error(f"Error sending Pomodoro check to {user_id}: {e}")
 
