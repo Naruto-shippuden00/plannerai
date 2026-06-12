@@ -31,36 +31,23 @@ def is_admin(user_id: int) -> bool:
 async def admin_panel(message: Message):
     """Admin panel"""
     if not is_admin(message.from_user.id):
-        # Debug ma'lumot
-        admin_id_env = os.getenv('ADMIN_USER_ID')
-        await message.answer(
-            f"❌ Bu komanda faqat admin uchun!\n\n"
-            f"🔍 Debug:\n"
-            f"Sizning ID: `{message.from_user.id}`\n"
-            f"Admin ID (.env): `{admin_id_env}`\n"
-            f"Match: {str(message.from_user.id) == str(admin_id_env)}",
-            parse_mode="Markdown"
-        )
+        await message.answer("❌ Bu komanda faqat admin uchun!")
         return
     
-    text = """
-👨‍💼 **ADMIN PANEL**
+    admin_id = message.from_user.id
+    
+    text = f"""👨‍💼 **ADMIN PANEL**
 
 Quyidagi komandalar mavjud:
 
 📊 /stats_all - Tizim statistikasi
 👥 /users - Barcha foydalanuvchilar
-📈 /user_stats <user_id> - Foydalanuvchi statistikasi
 🔍 /check - Bot holatini tekshirish
-📢 /broadcast <xabar> - Barcha userlarga xabar
 
-📌 Sizning admin ID: {admin_id}
+📌 Sizning admin ID: `{admin_id}`
 """
     
-    await message.answer(
-        text.format(admin_id=message.from_user.id),
-        parse_mode="Markdown"
-    )
+    await message.answer(text, parse_mode="Markdown")
 
 @router.message(Command("stats_all"))
 async def system_stats(message: Message):
