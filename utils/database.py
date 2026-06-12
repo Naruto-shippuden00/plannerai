@@ -215,3 +215,79 @@ async def delete_task(task_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("UPDATE tasks SET active = 0 WHERE id = ?", (task_id,))
         await db.commit()
+
+async def get_all_users() -> List[Dict]:
+    """Barcha foydalanuvchilarni olish (Admin uchun)"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT user_id, username, full_name, created_at, timezone
+            FROM users
+            ORDER BY created_at DESC
+        """) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+async def get_user_stats(user_id: int) -> Dict:
+    """Foydalanuvchi statistikasi"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        
+        # Jami vazifalar
+        async with db.execute("""
+            SELECT COUNT(*) as total FROM tasks WHERE user_id = ? AND active = 1
+        """, (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            total_tasks = row['total']
+        
+        # Bajarilgan vazifalar
+        async with db.execute("""
+            SELECT COUNT(*) as completed FROM completions WHERE user_id = ?
+        """, (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            completed = row['completed']
+        
+        return {
+            'total_tasks': total_tasks,
+            'completed': completed,
+            'completion_rate': (completed / total_tasks * 100) if total_tasks > 0 else 0
+        }
+
+async def get_system_stats() -> Dict:
+    """Tizim statistikasi (Admin uchun)"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        
+        # Jami foydalanuvchilar
+        async with db.execute("SELECT COUNT(*) as total FROM users") as cursor:
+            row = await cursor.fetchone()
+            total_users = row['total']
+        
+        # Jami vazifalar
+        async with db.execute("SELECT COUNT(*) as total FROM tasks WHERE active = 1") as cursor:
+            row = await cursor.fetchone()
+            total_tasks = row['total']
+        
+        # Jami bajarilgan
+        async with db.execute("SELECT COUNT(*) as total FROM completions") as cursor:
+            row = await cursor.fetchone()
+            total_completions = row['total']
+        
+        # Eng faol kategoriya
+        async with db.execute("""
+            SELECT category, COUNT(*) as count
+            FROM tasks
+            WHERE active = 1
+            GROUP BY category
+            ORDER BY count DESC
+            LIMIT 1
+        """) as cursor:
+            row = await cursor.fetchone()
+            top_category = dict(row) if row else {'category': 'N/A', 'count': 0}
+        
+        return {
+            'total_users': total_users,
+            'total_tasks': total_tasks,
+            'total_completions': total_completions,
+            'top_category': top_category
+        }
