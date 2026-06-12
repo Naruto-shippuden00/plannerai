@@ -21,7 +21,11 @@ def is_admin(user_id: int) -> bool:
     admin_id = os.getenv('ADMIN_USER_ID')
     if not admin_id:
         return False
-    return str(user_id) == str(admin_id)
+    # String'ni integer'ga o'tkazamiz va taqqoslaymiz
+    try:
+        return int(user_id) == int(admin_id.strip())
+    except (ValueError, AttributeError):
+        return False
 
 @router.message(Command("admin"))
 async def admin_panel(message: Message):
