@@ -5,10 +5,14 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from aiogram import Bot
 import logging
 
 from utils.database import get_schedule
+
+# Tashkent vaqt zonasi
+TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
 
 async def get_all_users():
     """Scheduler uchun import"""
@@ -31,12 +35,15 @@ async def check_and_send_reminders(bot: Bot):
     try:
         from utils.database import get_all_users, get_user_schedule_for_today
         
-        current_time = datetime.now()
+        # TASHKENT VAQTI bilan ishlash
+        current_time = datetime.now(TASHKENT_TZ)
         current_day = current_time.weekday()  # 0=Monday, 6=Sunday
         current_hour = current_time.hour
         current_minute = current_time.minute
         
-        logger.info(f"⏰ Checking reminders at {current_hour:02d}:{current_minute:02d}, day={current_day}")
+        # Hafta kunlari nomlari debug uchun
+        day_names = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"]
+        logger.info(f"⏰ Checking reminders at {current_hour:02d}:{current_minute:02d}, day={current_day} ({day_names[current_day]})")
         
         # Barcha foydalanuvchilarni olish
         users = await get_all_users()
@@ -47,27 +54,27 @@ async def check_and_send_reminders(bot: Bot):
             # Foydalanuvchining bugungi jadvalini olish
             schedule = await get_user_schedule_for_today(user_id, current_day)
             
+            if schedule:
+                logger.info(f"👤 User {user_id}: {len(schedule)} tasks scheduled for {day_names[current_day]}")
+            
             for item in schedule:
                 start_time = item['start_time']
+                end_time = item.get('end_time', 'N/A')
                 task_name = item['task_name']
                 task_id = item['task_id']
                 
                 # Vaqtni parse qilish
                 try:
-                    if '-' in start_time:
-                        # Format: "17:00 - 18:00" yoki "17:00-18:00"
-                        time_parts = start_time.split('-')
-                        item_time_str = time_parts[0].strip()
-                    else:
-                        # Format: "17:00"
-                        item_time_str = start_time.strip()
-                    
+                    # start_time faqat boshlanish vaqti (masalan "17:00")
+                    item_time_str = start_time.strip()
                     item_hour, item_minute = map(int, item_time_str.split(':'))
                     
                     # ANIQ VAQT TEKSHIRUVI - ± 0 daqiqa
                     if item_hour == current_hour and item_minute == current_minute:
                         logger.info(f"🔔 MATCH! Sending reminder to user {user_id} for task '{task_name}' at {item_time_str}")
-                        await send_task_reminder(bot, user_id, task_id, task_name, start_time)
+                        # start_time va end_time ni birlashtirgan holda yuboramiz
+                        time_range = f"{start_time}-{end_time}" if end_time != 'N/A' else start_time
+                        await send_task_reminder(bot, user_id, task_id, task_name, time_range)
                     
                 except Exception as e:
                     logger.error(f"Error parsing time '{start_time}' for task {task_id}: {e}")
@@ -179,11 +186,12 @@ async def send_task_reminder(bot: Bot, user_id: int, task_id: int, task_name: st
             if end_time != "N/A":
                 end_hour, end_min = map(int, end_time.split(':'))
                 
-                today = datetime.now()
+                # TASHKENT VAQTI bilan ishlash
+                today = datetime.now(TASHKENT_TZ)
                 end_datetime = today.replace(hour=end_hour, minute=end_min, second=0, microsecond=0)
                 
                 # Agar vaqt o'tib ketgan bo'lsa, ertaga qo'shamiz
-                if end_datetime < datetime.now():
+                if end_datetime < datetime.now(TASHKENT_TZ):
                     end_datetime += timedelta(days=1)
                 
                 # Vazifa tugaganda rasm so'rash va jazo berish
@@ -191,7 +199,7 @@ async def send_task_reminder(bot: Bot, user_id: int, task_id: int, task_name: st
                     check_task_completion,
                     trigger=DateTrigger(run_date=end_datetime),
                     args=[bot, user_id, task_id, session_id, task_name],
-                    id=f"completion_{user_id}_{task_id}_{int(datetime.now().timestamp())}",
+                    id=f"completion_{user_id}_{task_id}_{int(datetime.now(TASHKENT_TZ).timestamp())}",
                     replace_existing=False
                 )
                 
