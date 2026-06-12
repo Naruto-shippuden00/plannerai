@@ -88,7 +88,7 @@ async def generate_ai_schedule(message: Message):
         )
 
 def format_schedule_preview(schedule: dict) -> str:
-    """Jadvalni formatlash"""
+    """Jadvalni formatlash - statistika bilan"""
     day_names = {
         "monday": "Dushanba",
         "tuesday": "Seshanba", 
@@ -99,10 +99,31 @@ def format_schedule_preview(schedule: dict) -> str:
         "sunday": "Yakshanba"
     }
     
-    text = ""
+    # Statistika hisoblash
+    total_sessions = 0
+    task_frequency = {}
+    
+    for day_eng, items in schedule.items():
+        if day_eng == "sunday":
+            continue  # Yakshanba review kuni
+        for item in items:
+            total_sessions += 1
+            task_name = item.get('task', 'N/A')
+            task_frequency[task_name] = task_frequency.get(task_name, 0) + 1
+    
+    # Haftalik statistika
+    text = "📊 **HAFTALIK JADVAL STATISTIKASI:**\n\n"
+    text += f"📚 Jami sessionlar: {total_sessions}\n"
+    text += f"📝 Har bir vazifa:\n"
+    for task, count in sorted(task_frequency.items(), key=lambda x: x[1], reverse=True):
+        text += f"   • {task}: {count}x haftada\n"
+    text += f"\n{'='*30}\n\n"
+    
+    # Kunlik jadval
     for day_eng, day_uz in day_names.items():
         if day_eng in schedule and schedule[day_eng]:
-            text += f"\n📅 **{day_uz}**\n"
+            emoji = "📍" if day_eng == datetime.now().strftime("%A").lower() else "📅"
+            text += f"\n{emoji} **{day_uz}**\n"
             for item in schedule[day_eng]:
                 time = item.get('time', 'N/A')
                 task = item.get('task', 'N/A')
