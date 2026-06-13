@@ -30,7 +30,7 @@ router = Router()
 user_schedules = {}
 
 @router.message(F.text == "🤖 AI Jadval")
-async def generate_ai_schedule(message: Message, state: FSMContext):
+async def generate_ai_schedule(message: Message):
     """AI bilan jadval tuzish"""
     user_id = message.from_user.id
     tasks = await get_user_tasks(user_id)
@@ -42,25 +42,6 @@ async def generate_ai_schedule(message: Message, state: FSMContext):
             reply_markup=main_menu_keyboard()
         )
         return
-    
-    # Filtr so'rash
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🔴 Faqat MUHIM vazifalar", callback_data="filter_priority_3")],
-            [InlineKeyboardButton(text="🟡 Faqat O'RTACHA vazifalar", callback_data="filter_priority_2")],
-            [InlineKeyboardButton(text="🟢 Faqat PAST vazifalar", callback_data="filter_priority_1")],
-            [InlineKeyboardButton(text="✨ BARCHASI (tavsiya)", callback_data="filter_priority_all")]
-        ]
-    )
-    
-    await message.answer(
-        "🎯 **JADVAL FILTRI**\n\n"
-        "Qaysi prioritetdagi vazifalarni jadvalga kiritamiz?\n\n"
-        "💡 **Tavsiya:** BARCHASI - AI eng yaxshi taqsimotni tuzadi",
-        parse_mode="Markdown",
-        reply_markup=keyboard
-    )
-    return
     
     # Foydalanuvchi sozlamalarini olish
     settings = await get_user_settings(user_id)
@@ -166,94 +147,6 @@ def format_schedule_preview(schedule: dict) -> str:
                 text += f"  • {time} - {task}\n"
     
     return text
-
-@router.callback_query(F.data.startswith("filter_priority_"))
-async def filter_priority_handler(callback: CallbackQuery):
-    """Prioritet filterini tanlash"""
-    user_id = callback.from_user.id
-    
-    # Filterni olish
-    filter_data = callback.data.replace("filter_priority_", "")
-    
-    if filter_data == "all":
-        priority_filter = None
-        filter_text = "Barcha prioritetlar"
-    else:
-        priority_filter = int(filter_data)
-        priority_map = {3: "🔴 MUHIM", 2: "🟡 O'RTACHA", 1: "🟢 PAST"}
-        filter_text = priority_map.get(priority_filter, "Barchasi")
-    
-    # Vazifalarni olish
-    all_tasks = await get_user_tasks(user_id)
-    
-    # Filtrlash
-    if priority_filter:
-        tasks = [t for t in all_tasks if t['priority'] == priority_filter]
-    else:
-        tasks = all_tasks
-    
-    if not tasks:
-        await callback.message.edit_text(
-            f"❌ **{filter_text}** vazifalar topilmadi!\n\n"
-            "Boshqa prioritetni tanlang yoki yangi vazifa qo'shing.",
-            parse_mode="Markdown"
-        )
-        await callback.answer()
-        return
-    
-    # Foydalanuvchi sozlamalarini olish
-    settings = await get_user_settings(user_id)
-    work_start = settings.get('work_start_time', '08:00')
-    work_end = settings.get('work_end_time', '16:00')
-    
-    # Loading message
-    await callback.message.edit_text(
-        f"🤖 **AI jadval tuzmoqda...**\n\n"
-        f"📊 Filtr: {filter_text}\n"
-        f"📝 Vazifalar: {len(tasks)} ta\n\n"
-        f"⏳ Bir oz kuting..."
-    )
-    
-    # AI bilan jadval generatsiya
-    work_start_hour = int(work_start.split(':')[0])
-    work_end_hour = int(work_end.split(':')[0])
-    
-    constraints = {
-        "work_hours": [work_start_hour, work_end_hour],
-        "work_start_time": work_start,
-        "work_end_time": work_end,
-        "work_days": [0, 1, 2, 3, 4, 5],  # Dushanba-Shanba
-        "sleep_hours": [23, 6],
-        "priority_focused": True,
-        "priority_filter": priority_filter  # YANGI: Prioritet filtri
-    }
-    
-    try:
-        schedule = await generate_schedule(tasks, constraints)
-        user_schedules[user_id] = schedule
-        
-        # Jadvalni formatlash
-        schedule_text = format_schedule_preview(schedule)
-        
-        await callback.message.edit_text(
-            f"✅ **Jadval tayyor!**\n\n"
-            f"📊 Filtr: {filter_text}\n"
-            f"📝 Vazifalar: {len(tasks)} ta\n\n"
-            f"{schedule_text}\n\n"
-            f"Bu jadval sizning prioritetlaringiz va ish vaqtingizni "
-            f"({work_start}-{work_end}) hisobga olgan holda tuzildi.\n\n"
-            "**Tasdiqlaysizmi?**",
-            parse_mode="Markdown",
-            reply_markup=confirm_schedule_keyboard()
-        )
-        
-    except Exception as e:
-        await callback.message.edit_text(
-            f"❌ Xatolik yuz berdi: {str(e)}\n\n"
-            "Qaytadan urinib ko'ring yoki /help buyrug'ini kiriting."
-        )
-    
-    await callback.answer()
 
 @router.callback_query(F.data == "confirm_schedule")
 async def confirm_schedule_handler(callback: CallbackQuery):
