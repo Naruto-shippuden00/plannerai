@@ -48,11 +48,16 @@ async def generate_ai_schedule(message: Message):
     work_start = settings.get('work_start_time', '08:00')
     work_end = settings.get('work_end_time', '16:00')
     
+    # DEBUG: User'ga qaysi vaqtdan foydalanilayotganini ko'rsatish
     # Loading message
     loading_msg = await message.answer(
-        "🤖 AI jadval tuzmoqda...\n\n"
-        "⏳ Bir oz kuting, sizning vazifalaringizni tahlil qilyapman va "
-        "optimal jadval yaratyapman..."
+        f"🤖 **AI jadval tuzmoqda...**\n\n"
+        f"📊 **Sizning sozlamalaringiz:**\n"
+        f"🕐 Ish vaqti: {work_start} - {work_end}\n"
+        f"📝 Vazifalar: {len(tasks)} ta\n\n"
+        f"⏳ Jadval ishdan keyin: {work_end} dan keyin boshlanadi\n\n"
+        f"Bir oz kuting...",
+        parse_mode="Markdown"
     )
     
     # AI bilan jadval generatsiya
@@ -77,9 +82,14 @@ async def generate_ai_schedule(message: Message):
         schedule_text = format_schedule_preview(schedule)
         
         await loading_msg.edit_text(
-            f"✅ **Jadval tayyor!**\n\n{schedule_text}\n\n"
+            f"✅ **Jadval tayyor!**\n\n"
+            f"📊 **Sozlamalar:**\n"
+            f"🕐 Ish vaqti: {work_start} - {work_end}\n"
+            f"📝 Vazifalar: {len(tasks)} ta\n\n"
+            f"{schedule_text}\n\n"
             f"Bu jadval sizning prioritetlaringiz va ish vaqtingizni "
             f"({work_start}-{work_end}) hisobga olgan holda tuzildi.\n\n"
+            f"📅 Jadval **{work_end}** dan keyin boshlanadi\n\n"
             "**Tasdiqlaysizmi?**",
             parse_mode="Markdown",
             reply_markup=confirm_schedule_keyboard()
