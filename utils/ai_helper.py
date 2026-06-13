@@ -187,23 +187,26 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
         else:
             task_frequency[task['id']] = 2  # Haftada 2 marta
     
-    # Har bir kun uchun 2-3 ta slot
-    daily_slots = [
-        f"{start_hour:02d}:00-{start_hour+1:02d}:30",
-        f"{start_hour+2:02d}:00-{start_hour+3:02d}:30",
-    ]
+    # Har bir vazifa uchun davomiyligini olish
+    # MUHIM: Vaqt hisoblashda xato yo'q qilish uchun
+    def calculate_end_time(start_h, duration_min):
+        """Boshlanish vaqti va davomiylikdan tugash vaqtini hisoblash"""
+        total_minutes = start_h * 60 + duration_min
+        end_h = (total_minutes // 60) % 24
+        end_m = total_minutes % 60
+        return f"{end_h:02d}:{end_m:02d}"
     
     # Round-robin usulida taqsimlash
     task_assignments = {task['id']: 0 for task in sorted_tasks}  # Har bir vazifa necha marta qo'shilgani
     
+    current_time_offset = start_hour  # Boshlash vaqti
+    
     for day_idx, day in enumerate(weekdays):
         # Har kuni 2 ta vazifa
         daily_task_count = 0
+        current_time_offset = start_hour  # Har kun uchun qaytadan boshlash
         
-        for slot in daily_slots:
-            if daily_task_count >= 2:
-                break
-            
+        while daily_task_count < 2:
             # Eng kam qo'shilgan va frequency'ga yetmagan vazifani topish
             best_task = None
             min_assignments = float('inf')
@@ -223,13 +226,26 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
                             min_assignments = current_assignments
             
             if best_task:
+                # Vazifaning davomiyligini olish (daqiqalarda)
+                duration_minutes = best_task.get('duration_minutes', 60)
+                
+                # Vaqt oralig'ini hisoblash
+                start_time = f"{current_time_offset:02d}:00"
+                end_time = calculate_end_time(current_time_offset, duration_minutes)
+                time_slot = f"{start_time}-{end_time}"
+                
                 schedule[day].append({
-                    "time": slot,
+                    "time": time_slot,
                     "task": best_task['task_name'],
                     "task_id": best_task['id']
                 })
                 task_assignments[best_task['id']] += 1
                 daily_task_count += 1
+                
+                # Keyingi vazifa uchun vaqtni yangilash (duration + 15 min tanaffus)
+                current_time_offset += (duration_minutes // 60) + 1  # Tanaffus bilan
+            else:
+                break  # Boshqa vazifa yo'q
     
     # Yakshanba - review va test kuni
     schedule["sunday"] = [
