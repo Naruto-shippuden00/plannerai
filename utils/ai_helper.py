@@ -3,8 +3,9 @@ AI Helper - Groq API (bepul) ishlatadi
 """
 import os
 from groq import Groq
-from typing import List, Dict
+from typing import List, Dict, Optional
 import json
+import base64
 
 client = None
 
@@ -15,6 +16,96 @@ def init_ai():
     if api_key:
         client = Groq(api_key=api_key)
     return client is not None
+
+def encode_image(image_path: str) -> Optional[str]:
+    """Rasmni base64 formatga o'girish"""
+    try:
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8')
+    except Exception as e:
+        print(f"Image encoding error: {e}")
+        return None
+
+async def analyze_task_photo(photo_path: str, task_id: int, user_id: int) -> str:
+    """
+    Vazifa rasmini AI bilan tahlil qilish
+    
+    Args:
+        photo_path: Rasm fayl yo'li
+        task_id: Vazifa ID
+        user_id: Foydalanuvchi ID
+    
+    Returns:
+        Tahlil matni
+    """
+    if not client:
+        return "AI xizmat hozirda mavjud emas."
+    
+    try:
+        # Vazifa ma'lumotlarini olish (agar kerak bo'lsa)
+        from utils.database import get_task_by_id
+        task_info = await get_task_by_id(task_id, user_id)
+        task_name = task_info.get('task_name', 'vazifa') if task_info else 'vazifa'
+        category = task_info.get('category', '') if task_info else ''
+        
+        # Rasmni encode qilish
+        base64_image = encode_image(photo_path)
+        if not base64_image:
+            return "Rasmni o'qishda xatolik yuz berdi."
+        
+        prompt = f"""
+Siz o'quvchilarni motivatsiya qiluvchi AI yordamchisisiz. 
+
+Vazifa: {task_name}
+Kategoriya: {category}
+
+Rasmni tahlil qilib, quyidagilarni baholang:
+
+1. **Nima qilindi?** (qisqacha)
+2. **Sifat darajasi** (1-10 ball)
+3. **Kuzatmalar va tavsiyalar** (ijobiy va qurilish yo'nalishida)
+
+MUHIM:
+- O'zbek tilida yozing
+- Qisqa va aniq bo'ling (3-5 jumla)
+- Motivatsiya bering, tanqid qilmang
+- Agar rasm vazifaga mos bo'lmasa, muloyim ta'kidlang
+
+Format:
+📸 [Nima ko'rsatilgan]
+⭐️ Baho: [X/10]
+💡 Tavsiya: [Qisqa tavsiya]
+"""
+        
+        response = client.chat.completions.create(
+            model="llama-3.2-90b-vision-preview",  # Groq vision model
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            temperature=0.7,
+            max_tokens=500
+        )
+        
+        analysis = response.choices[0].message.content.strip()
+        return analysis
+        
+    except Exception as e:
+        print(f"AI photo analysis error: {e}")
+        return f"⚠️ AI tahlil xatolik: {str(e)}\n\nRasm qabul qilindi, davom eting!"
 
 async def generate_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
     """

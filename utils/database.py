@@ -1001,3 +1001,27 @@ async def get_user_statistics_cached(user_id: int) -> Dict:
                 """, (user_id,)) as cursor2:
                     row2 = await cursor2.fetchone()
                     return dict(row2) if row2 else {}
+
+
+
+async def get_task_by_id(task_id: int, user_id: int) -> Optional[Dict]:
+    """
+    Vazifa ma'lumotlarini ID bo'yicha olish
+    
+    Args:
+        task_id: Vazifa ID
+        user_id: Foydalanuvchi ID (xavfsizlik uchun)
+    
+    Returns:
+        Vazifa ma'lumotlari yoki None
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT * FROM tasks 
+            WHERE id = ? AND user_id = ?
+        """, (task_id, user_id)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return dict(row)
+            return None

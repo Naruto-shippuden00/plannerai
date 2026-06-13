@@ -50,7 +50,9 @@ async def start_completion(callback: CallbackQuery, state: FSMContext):
 
 @router.message(CompletionState.waiting_for_photo, F.photo)
 async def receive_photo(message: Message, state: FSMContext):
-    """Rasm qabul qilish"""
+    """Rasm qabul qilish va AI tahlil"""
+    from utils.ai_helper import analyze_task_photo
+    
     data = await state.get_data()
     
     # Rasmni saqlash
@@ -64,19 +66,44 @@ async def receive_photo(message: Message, state: FSMContext):
     # Rasmni yuklab olish
     await message.bot.download(photo.file_id, photo_path)
     
-    await state.update_data(photo_path=photo_path)
-    await state.set_state(CompletionState.waiting_for_notes)
+    # AI bilan rasmni tahlil qilish
+    await message.answer("🤖 AI rasmni tahlil qilmoqda...")
     
-    await message.answer(
-        "✅ Rasm qabul qilindi!\n\n"
-        "📝 Endi qisqacha izoh yozing:\n\n"
-        "Misol:\n"
-        "• 'SAT Math 20 ta savol bajardim'\n"
-        "• 'Python da loop mavzusini o'rgandim'\n"
-        "• '25 sahifa o'qidim'\n\n"
-        "⏭ Izoh qo'shmasangiz /skip yozing",
-        reply_markup=main_menu_keyboard()
+    task_id = data['task_id']
+    analysis = await analyze_task_photo(photo_path, task_id, message.from_user.id)
+    
+    await state.update_data(
+        photo_path=photo_path,
+        ai_analysis=analysis
     )
+    
+    # Tahlil natijasini ko'rsatish
+    if analysis:
+        await message.answer(
+            f"🔍 **AI Tahlili:**\n\n"
+            f"{analysis}\n\n"
+            f"━━━━━━━━━━━━━━━━\n"
+            f"📝 Endi qisqacha izoh yozing yoki /skip:\n\n"
+            f"Misol:\n"
+            f"• 'SAT Math 20 ta savol bajardim'\n"
+            f"• 'Python da loop mavzusini o'rgandim'\n"
+            f"• '25 sahifa o'qidim'",
+            parse_mode="Markdown",
+            reply_markup=main_menu_keyboard()
+        )
+    else:
+        await message.answer(
+            "✅ Rasm qabul qilindi!\n\n"
+            "📝 Endi qisqacha izoh yozing:\n\n"
+            "Misol:\n"
+            "• 'SAT Math 20 ta savol bajardim'\n"
+            "• 'Python da loop mavzusini o'rgandim'\n"
+            "• '25 sahifa o'qidim'\n\n"
+            "⏭ Izoh qo'shmasangiz /skip yozing",
+            reply_markup=main_menu_keyboard()
+        )
+    
+    await state.set_state(CompletionState.waiting_for_notes)
 
 @router.message(CompletionState.waiting_for_photo, F.text == "/skip")
 async def skip_photo(message: Message, state: FSMContext):
@@ -95,6 +122,13 @@ async def receive_notes(message: Message, state: FSMContext):
     data = await state.get_data()
     
     notes = None if message.text == "/skip" else message.text
+    ai_analysis = data.get('ai_analysis', '')
+    
+    # Agar izoh yo'q bo'lsa, AI tahlilini izoh sifatida saqlash
+    if not notes and ai_analysis:
+        notes = f"[AI tahlili] {ai_analysis}"
+    elif notes and ai_analysis:
+        notes = f"{notes}\n\n[AI tahlili] {ai_analysis}"
     
     # Ma'lumotlar bazasiga saqlash
     await mark_task_completed(
