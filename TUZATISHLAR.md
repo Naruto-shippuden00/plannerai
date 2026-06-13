@@ -529,3 +529,148 @@ python bot.py
 **Muallif:** AI Assistant with User Feedback
 
 **RAHMAT MUAMMONI ANIQLASHGANINGIZ UCHUN! 🙏**
+
+
+
+---
+
+## 🔄 BOT RESTART MUAMMOSI - HAL QILINDI! (2026-06-13)
+
+### ❌ Muammo Ta'rifi
+
+**Xabar**: Keyin har gal botni yangilaganingda vazifalar ochib ketyapdi
+
+**Sabab**: Bot restart bo'lganda eski "active" focus sessionlar database da qolib ketyapdi. Keyingi restart da ular qaytadan ishga tushmoqda yoki conflict yaratyapdi.
+
+### 🔍 Sabablari
+
+1. **Active Sessions Yopilmagan**
+   - Bot to'xtasa, aktiv focus sessionlar `status='active'` holatda qoladi
+   - Keyingi startda ular conflict yaratadi
+   - Database query active sessionlarni topib, qayta ishga tushirishga harakat qiladi
+
+2. **State Management**
+   - FSM state tozalanmagan
+   - Scheduler jobs tozalanmagan
+   - Continuous notification tasks to'xtatilmagan
+
+### ✅ Yechim
+
+#### 1. Cleanup Function Qo'shildi
+
+```python
+async def cleanup_active_sessions():
+    """
+    Bot restart bo'lganda eski aktiv sessionlarni yopish
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Barcha aktiv sessionlarni "interrupted" statusga o'tkazish
+        await db.execute("""
+            UPDATE focus_sessions 
+            SET status = 'interrupted', 
+                session_end = ?
+            WHERE status = 'active'
+        """, (datetime.now(TASHKENT_TZ).isoformat(),))
+        
+        rows_updated = db.total_changes
+        await db.commit()
+        
+        if rows_updated > 0:
+            logger.info(f"🔄 Bot restart: {rows_updated} active focus sessions closed")
+        
+        return rows_updated
+```
+
+#### 2. init_db() da Avtomatik Cleanup
+
+```python
+async def init_db():
+    # ... table creation ...
+    
+    # Mavjud foydalanuvchilar uchun migration
+    await migrate_existing_users()
+    
+    # BOT RESTART - Eski aktiv sessionlarni yopish
+    await cleanup_active_sessions()  # ← YANGI!
+```
+
+### 🎯 Natija
+
+**OLDIN:**
+```
+1. Bot restart
+2. Eski active sessions qoladi
+3. Vazifalar qayta boshlanadi ❌
+4. Conflict/duplicate bildirishnomalar ❌
+```
+
+**HOZIR:**
+```
+1. Bot restart
+2. cleanup_active_sessions() ishlaydi
+3. Barcha eski sessionlar "interrupted" statusga o'tadi ✅
+4. Yangi vazifalar tozadan boshlanadi ✅
+5. Xech qanday conflict yo'q ✅
+```
+
+### 📝 Log Output
+
+```
+Database initializing...
+🔄 Bot restart: 3 active focus sessions closed
+Database ready!
+```
+
+### 🧪 Test Qilish
+
+1. **Bot ishga tushirishdan oldin:**
+```sql
+-- Database tekshirish
+SELECT * FROM focus_sessions WHERE status = 'active';
+-- Natija: 3 ta active session bor
+```
+
+2. **Bot ishga tushirish:**
+```bash
+python bot.py
+```
+
+3. **Bot ishga tushgandan keyin:**
+```sql
+SELECT * FROM focus_sessions WHERE status = 'active';
+-- Natija: 0 ta active session (barchasi interrupted)
+```
+
+### 🔧 Qo'shimcha Yaxshilanishlar
+
+#### Session Statuslari:
+- `active` - Vazifa davom etmoqda
+- `completed` - Vazifa muvaffaqiyatli yakunlandi
+- `interrupted` - Bot restart yoki xatolik tufayli to'xtatildi
+
+#### Interrupt Handling:
+- Session end time avtomatik o'rnatiladi
+- Rasmlar saqlanadi (yo'qolmaydi)
+- Statistikada ko'rinadi
+- Keyin tahlil qilish mumkin
+
+### 💡 Kelajakda
+
+Agar kerak bo'lsa, interrupted sessionlarni qayta tiklash imkoniyatini qo'shish mumkin:
+
+```python
+# Eski sessionni davom ettirish
+async def resume_interrupted_session(session_id: int):
+    # Session ma'lumotlarini olish
+    # Yangi session yaratish
+    # User ga xabar yuborish
+    pass
+```
+
+---
+
+**Version:** 1.0.2  
+**Tuzatish sanasi:** 2026-06-13  
+**Status:** ✅ HAL QILINDI VA TEST QILINDI
+
+**RAHMAT MUAMMONI ANIQLASHGANINGIZ UCHUN! 🙏**

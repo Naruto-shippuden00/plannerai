@@ -151,6 +151,9 @@ async def init_db():
     
     # Mavjud foydalanuvchilar uchun migration
     await migrate_existing_users()
+    
+    # BOT RESTART - Eski aktiv sessionlarni yopish
+    await cleanup_active_sessions()
 
 async def add_user(user_id: int, username: str, full_name: str):
     """Yangi foydalanuvchi qo'shish"""
@@ -680,3 +683,27 @@ async def get_task_by_id(task_id: int) -> Optional[Dict]:
         """, (task_id,)) as cursor:
             row = await cursor.fetchone()
             return dict(row) if row else None
+
+async def cleanup_active_sessions():
+    """
+    Bot restart bo'lganda eski aktiv sessionlarni yopish
+    Bu muammo: Bot restart bo'lganda vazifalar qayta boshlanib ketmasligini ta'minlaydi
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Barcha aktiv sessionlarni "interrupted" statusga o'tkazish
+        await db.execute("""
+            UPDATE focus_sessions 
+            SET status = 'interrupted', 
+                session_end = ?
+            WHERE status = 'active'
+        """, (datetime.now(TASHKENT_TZ).isoformat(),))
+        
+        rows_updated = db.total_changes
+        await db.commit()
+        
+        if rows_updated > 0:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"🔄 Bot restart: {rows_updated} active focus sessions closed")
+        
+        return rows_updated

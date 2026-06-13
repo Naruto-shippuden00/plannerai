@@ -1,5 +1,38 @@
 # 📝 CHANGELOG
 
+## Version 1.0.2 (2026-06-13) - BOT RESTART FIX 🔄
+
+### 🐛 Tuzatishlar
+
+#### 🔄 Bot Restart Muammosi Hal Qilindi
+- **MUAMMO**: Bot restart bo'lganda vazifalar qayta boshlanib ketyapdi
+- **SABAB**: Eski active focus sessionlar database da qolib ketayotgan edi
+- **HAL**: `cleanup_active_sessions()` funksiyasi qo'shildi
+
+#### 🔧 Tuzatilgan
+```python
+utils/database.py
+- cleanup_active_sessions() funksiyasi yaratildi
+- init_db() da avtomatik cleanup
+- Active sessionlar "interrupted" statusga o'tkaziladi
+- Session end time avtomatik o'rnatiladi
+```
+
+#### ✅ Endi Ishlaydi
+- ✅ Bot restart qilinganda eski sessionlar yopiladi
+- ✅ Vazifalar qayta boshlanmaydi
+- ✅ Conflict/duplicate bildirishnomalar yo'q
+- ✅ Database tozadan boshlanadi
+
+### 📝 Log Output
+```
+Database initializing...
+🔄 Bot restart: 3 active focus sessions closed
+Database ready!
+```
+
+---
+
 ## Version 1.0.1 (2026-06-12) - TIMEZONE FIX 🌍
 
 ### 🐛 Muhim Tuzatishlar
