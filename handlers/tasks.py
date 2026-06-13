@@ -106,10 +106,19 @@ async def add_task_priority(callback: CallbackQuery, state: FSMContext):
 async def add_task_duration(callback: CallbackQuery, state: FSMContext):
     """Davomiylik tanlash"""
     if callback.data == "dur_custom":
+        # Custom duration uchun state'ni saqlash
+        await state.set_state(AddTaskState.waiting_for_duration)
         await callback.message.edit_text(
-            "⏱ Davomiylikni daqiqalarda kiriting:\n\n"
-            "Masalan: 45 yoki 90"
+            "⏱ **Davomiylikni daqiqalarda kiriting:**\n\n"
+            "Masalan:\n"
+            "• 15 (15 daqiqa)\n"
+            "• 45 (45 daqiqa)\n"
+            "• 90 (1 soat 30 daqiqa)\n"
+            "• 120 (2 soat)\n\n"
+            "Faqat RAQAM kiriting!",
+            parse_mode="Markdown"
         )
+        await callback.answer()
         return
     
     duration = int(callback.data.split("_")[1])
@@ -154,6 +163,62 @@ async def add_task_duration(callback: CallbackQuery, state: FSMContext):
         reply_markup=main_menu_keyboard()
     )
     await callback.answer("✅ Vazifa qo'shildi!", show_alert=False)
+
+# Custom duration handler
+@router.message(AddTaskState.waiting_for_duration, F.text)
+async def add_task_custom_duration(message: Message, state: FSMContext):
+    """Custom davomiylikni qabul qilish"""
+    try:
+        # Faqat raqam tekshirish
+        duration = int(message.text.strip())
+        
+        if duration < 5 or duration > 480:  # 5 daqiqadan 8 soatgacha
+            await message.answer(
+                "❌ **Noto'g'ri qiymat!**\n\n"
+                "Davomiylik 5 dan 480 daqiqagacha bo'lishi kerak.\n\n"
+                "Qaytadan kiriting:",
+                parse_mode="Markdown"
+            )
+            return
+        
+        data = await state.get_data()
+        
+        # Vazifani saqlash
+        task_id = await add_task(
+            user_id=message.from_user.id,
+            task_name=data['task_name'],
+            category=data['category'],
+            priority=data['priority'],
+            duration=duration
+        )
+        
+        await state.clear()
+        
+        await message.answer(
+            f"✅ **VAZIFA MUVAFFAQIYATLI QO'SHILDI!**\n\n"
+            f"📝 Nomi: **{data['task_name']}**\n"
+            f"📂 Kategoriya: {data['category']}\n"
+            f"⭐ Prioritet: {data['priority']}/3\n"
+            f"⏱ Davomiyligi: {duration} daqiqa\n\n"
+            f"═══════════════════════\n\n"
+            f"🎯 **KEYINGI QADAMLAR:**\n\n"
+            f"1️⃣ Yana vazifa qo'shing (ixtiyoriy)\n"
+            f"2️⃣ **'🤖 AI Jadval'** tugmasini bosing\n"
+            f"3️⃣ AI optimal jadval tuzadi\n"
+            f"4️⃣ Jadvalni tasdiqlang\n\n"
+            f"💪 **100% avtomatik nazorat!**",
+            parse_mode="Markdown",
+            reply_markup=main_menu_keyboard()
+        )
+        
+    except ValueError:
+        await message.answer(
+            "❌ **Xato!**\n\n"
+            "Faqat RAQAM kiriting!\n\n"
+            "Misol: 45 yoki 90\n\n"
+            "Qaytadan kiriting:",
+            parse_mode="Markdown"
+        )
 
 @router.message(F.text == "📋 Vazifalarim")
 async def show_tasks(message: Message):
