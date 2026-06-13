@@ -5,6 +5,7 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from utils.database import (
     get_user_tasks, 
@@ -19,6 +20,9 @@ from utils.keyboards import (
     day_navigation_keyboard,
     main_menu_keyboard
 )
+
+# Tashkent vaqt zonasi
+TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
 
 router = Router()
 
@@ -119,11 +123,18 @@ def format_schedule_preview(schedule: dict) -> str:
         text += f"   • {task}: {count}x haftada\n"
     text += f"\n{'='*30}\n\n"
     
+    # Bugungi kunni aniqlash (TASHKENT VAQTI)
+    current_day = datetime.now(TASHKENT_TZ).strftime("%A").lower()
+    
     # Kunlik jadval
     for day_eng, day_uz in day_names.items():
         if day_eng in schedule and schedule[day_eng]:
-            emoji = "📍" if day_eng == datetime.now().strftime("%A").lower() else "📅"
-            text += f"\n{emoji} **{day_uz}**\n"
+            # Bugungi kunni belgilash
+            emoji = "📍" if day_eng == current_day else "📅"
+            text += f"\n{emoji} **{day_uz}**"
+            if day_eng == current_day:
+                text += " ← BUGUN"
+            text += "\n"
             for item in schedule[day_eng]:
                 time = item.get('time', 'N/A')
                 task = item.get('task', 'N/A')
@@ -224,7 +235,8 @@ async def cancel_schedule_handler(callback: CallbackQuery):
 @router.message(F.text == "📅 Jadval")
 async def show_schedule(message: Message):
     """Jadvalni ko'rsatish"""
-    today = datetime.now().weekday()
+    # TASHKENT VAQTI bo'yicha bugungi kunni topish
+    today = datetime.now(TASHKENT_TZ).weekday()
     await show_day_schedule(message, today)
 
 async def show_day_schedule(message: Message, day: int):

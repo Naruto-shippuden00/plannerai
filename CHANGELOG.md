@@ -1,5 +1,63 @@
 # 📝 CHANGELOG
 
+## Version 1.0.1 (2026-06-12) - TIMEZONE FIX 🌍
+
+### 🐛 Muhim Tuzatishlar
+
+#### ⏰ Vaqt Zonasi Muammosi Hal Qilindi
+- **MUAMMO**: Bot UTC vaqtida ishlayotgan edi, Tashkent vaqti emas
+- **NATIJA**: Noto'g'ri vaqtda bildirishnomalar kelayotgan edi
+- **HAL**: Barcha datetime operatsiyalari uchun `Asia/Tashkent` timezone qo'shildi
+
+#### 📅 Kun Hisoblash Xatosi Tuzatildi
+- **MUAMMO**: Shanba kuni juma deb ko'rsatilayotgan edi
+- **SABAB**: Server vaqti va Tashkent vaqti farqi tufayli
+- **HAL**: `datetime.now(TASHKENT_TZ)` ishlatilmoqda
+
+#### 🔧 Tuzatilgan Fayllar
+```python
+utils/scheduler.py
+- datetime.now() → datetime.now(TASHKENT_TZ)
+- Hafta kunlari nomlari logga qo'shildi
+
+utils/database.py  
+- Barcha datetime.now() → datetime.now(TASHKENT_TZ)
+- zoneinfo.ZoneInfo import qilindi
+
+handlers/schedule.py
+- Bugungi kunni to'g'ri aniqlash
+- Jadval ko'rsatishda "BUGUN" belgisi
+
+handlers/reminders.py
+- Rasm fayl nomlari uchun Tashkent vaqti
+- Completion vaqtlari to'g'rilandi
+```
+
+#### 📦 Yangi Dependencies
+- `tzdata>=2024.1` - Timezone ma'lumotlari (Python 3.9+)
+
+#### ✅ Test Script
+- `test_timezone.py` - Vaqt zonasi tekshirish skripti
+- Server va Tashkent vaqtini solishtirish
+- Debug uchun kun nomlarini ko'rsatish
+
+### 🎯 Endi Ishlaydi
+- ✅ Vazifalar aniq vaqtida boshlanadi (Tashkent vaqti)
+- ✅ Kun to'g'ri ko'rsatiladi (shanba shanba deb ko'rsatiladi)
+- ✅ Bildirishnomalar to'g'ri vaqtda keladi
+- ✅ Juma kuni vazifalar juma kuni boshlanadi, kechqurun emas!
+
+### 📝 Qo'shimcha Ma'lumotlar
+**MUHIM**: Agar sizning serveringiz boshqa vaqt zonasida bo'lsa (masalan, AWS US-East), endi bot to'g'ri Tashkent vaqtida ishlaydi!
+
+**Misol**:
+- Juma 17:00 da vazifa rejalashtirilgan
+- Bot 17:00 (Tashkent) da aniq bildirishnoma yuboradi
+- Juma kuni 17:00-19:30 oralig'ida vazifalar bor
+- Kechqurun 21:00, 22:00, 23:00 da EMAS!
+
+---
+
 ## Version 1.0.0 (2026-06-11)
 
 ### ✨ Yangi xususiyatlar

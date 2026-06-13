@@ -6,10 +6,14 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import os
 
 from utils.database import mark_task_completed, get_schedule
 from utils.keyboards import task_action_keyboard, main_menu_keyboard
+
+# Tashkent vaqt zonasi
+TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
 
 router = Router()
 
@@ -27,7 +31,7 @@ async def start_completion(callback: CallbackQuery, state: FSMContext):
     
     await state.update_data(
         task_id=task_id,
-        scheduled_time=datetime.now().isoformat()
+        scheduled_time=datetime.now(TASHKENT_TZ).isoformat()
     )
     await state.set_state(CompletionState.waiting_for_photo)
     
@@ -54,7 +58,7 @@ async def receive_photo(message: Message, state: FSMContext):
     photo_dir = "data/photos"
     os.makedirs(photo_dir, exist_ok=True)
     
-    file_name = f"{message.from_user.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+    file_name = f"{message.from_user.id}_{datetime.now(TASHKENT_TZ).strftime('%Y%m%d_%H%M%S')}.jpg"
     photo_path = os.path.join(photo_dir, file_name)
     
     # Rasmni yuklab olish

@@ -4,9 +4,11 @@ Database utility functions
 import aiosqlite
 import json
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import List, Dict, Optional
 
 DB_PATH = "data/productivity.db"
+TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
 
 async def init_db():
     """Ma'lumotlar bazasini boshlash"""
@@ -156,7 +158,7 @@ async def add_user(user_id: int, username: str, full_name: str):
         await db.execute("""
             INSERT OR IGNORE INTO users (user_id, username, full_name, created_at)
             VALUES (?, ?, ?, ?)
-        """, (user_id, username, full_name, datetime.now().isoformat()))
+        """, (user_id, username, full_name, datetime.now(TASHKENT_TZ).isoformat()))
         await db.commit()
 
 async def add_task(user_id: int, task_name: str, category: str, priority: int = 1, duration: int = 60):
@@ -165,7 +167,7 @@ async def add_task(user_id: int, task_name: str, category: str, priority: int = 
         cursor = await db.execute("""
             INSERT INTO tasks (user_id, task_name, category, priority, duration_minutes, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (user_id, task_name, category, priority, duration, datetime.now().isoformat()))
+        """, (user_id, task_name, category, priority, duration, datetime.now(TASHKENT_TZ).isoformat()))
         await db.commit()
         return cursor.lastrowid
 
@@ -219,7 +221,7 @@ async def mark_task_completed(user_id: int, task_id: int, scheduled_time: str, p
         await db.execute("""
             INSERT INTO completions (user_id, task_id, scheduled_time, completed_at, photo_path, notes)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (user_id, task_id, scheduled_time, datetime.now().isoformat(), photo_path, notes))
+        """, (user_id, task_id, scheduled_time, datetime.now(TASHKENT_TZ).isoformat(), photo_path, notes))
         await db.commit()
 
 async def get_weekly_stats(user_id: int, week_start: Optional[datetime] = None) -> Dict:
@@ -455,7 +457,7 @@ async def get_user_schedule_for_today(user_id: int, day_of_week: int) -> List[Di
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("""
-            SELECT s.id, s.task_id, s.start_time, s.end_time, t.task_name
+            SELECT s.id, s.task_id, s.start_time, s.end_time, t.task_name, t.category
             FROM schedule s
             LEFT JOIN tasks t ON s.task_id = t.id
             WHERE s.user_id = ? AND s.day_of_week = ? AND s.active = 1
@@ -473,7 +475,7 @@ async def create_focus_session(user_id: int, task_id: int, schedule_id: int, pla
             INSERT INTO focus_sessions 
             (user_id, task_id, schedule_id, session_start, planned_duration, status)
             VALUES (?, ?, ?, ?, ?, 'active')
-        """, (user_id, task_id, schedule_id, datetime.now().isoformat(), planned_duration))
+        """, (user_id, task_id, schedule_id, datetime.now(TASHKENT_TZ).isoformat(), planned_duration))
         await db.commit()
         return cursor.lastrowid
 
@@ -495,7 +497,7 @@ async def get_active_focus_session(user_id: int) -> Optional[Dict]:
 async def end_focus_session(session_id: int, completed: bool = True):
     """Focus sessionni yakunlash"""
     async with aiosqlite.connect(DB_PATH) as db:
-        session_end = datetime.now().isoformat()
+        session_end = datetime.now(TASHKENT_TZ).isoformat()
         
         # Session boshlanish vaqtini olish
         async with db.execute(
@@ -505,7 +507,11 @@ async def end_focus_session(session_id: int, completed: bool = True):
             row = await cursor.fetchone()
             if row:
                 start_time = datetime.fromisoformat(row[0])
-                end_time = datetime.now()
+                # Agar timezone yo'q bo'lsa qo'shamiz
+                if start_time.tzinfo is None:
+                    start_time = start_time.replace(tzinfo=TASHKENT_TZ)
+                
+                end_time = datetime.now(TASHKENT_TZ)
                 actual_duration = int((end_time - start_time).total_seconds() / 60)
                 
                 await db.execute("""
@@ -521,7 +527,7 @@ async def add_focus_photo(session_id: int, photo_path: str) -> int:
         cursor = await db.execute("""
             INSERT INTO focus_photos (focus_session_id, photo_path, submitted_at)
             VALUES (?, ?, ?)
-        """, (session_id, photo_path, datetime.now().isoformat()))
+        """, (session_id, photo_path, datetime.now(TASHKENT_TZ).isoformat()))
         
         # Photos_submitted sonini oshirish
         await db.execute("""
@@ -554,7 +560,7 @@ async def add_punishment(user_id: int, task_id: int, session_id: int, punishment
             INSERT INTO punishments 
             (user_id, task_id, focus_session_id, punishment_type, reason, applied_at)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (user_id, task_id, session_id, punishment_type, reason, datetime.now().isoformat()))
+        """, (user_id, task_id, session_id, punishment_type, reason, datetime.now(TASHKENT_TZ).isoformat()))
         await db.commit()
 
 async def get_user_punishments(user_id: int, completed: Optional[bool] = None) -> List[Dict]:
@@ -596,7 +602,7 @@ async def set_camera_permission(user_id: int, granted: bool):
             INSERT OR REPLACE INTO camera_permissions 
             (user_id, permission_granted, granted_at)
             VALUES (?, ?, ?)
-        """, (user_id, 1 if granted else 0, datetime.now().isoformat()))
+        """, (user_id, 1 if granted else 0, datetime.now(TASHKENT_TZ).isoformat()))
         await db.commit()
 
 async def get_camera_permission(user_id: int) -> bool:
@@ -617,7 +623,7 @@ async def mark_task_as_completed(task_id: int):
             UPDATE tasks 
             SET completed = 1, completed_at = ?, times_completed = times_completed + 1
             WHERE id = ?
-        """, (datetime.now().isoformat(), task_id))
+        """, (datetime.now(TASHKENT_TZ).isoformat(), task_id))
         await db.commit()
 
 async def unmark_task_completion(task_id: int):
