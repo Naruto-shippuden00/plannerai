@@ -33,7 +33,7 @@ async def check_and_send_reminders(bot: Bot):
     jadvalini tekshirish va eslatma yuborish
     """
     try:
-        from utils.database import get_all_users, get_user_schedule_for_today, get_task_by_id
+        from utils.database import get_all_users, get_user_schedule_for_today
         
         # TASHKENT VAQTI bilan ishlash
         current_time = datetime.now(TASHKENT_TZ)
@@ -68,12 +68,6 @@ async def check_and_send_reminders(bot: Bot):
                     logger.warning(f"⚠️ Schedule item without task_id: {item}")
                     continue
                 
-                # Vazifa aktiv ekanligini tekshirish
-                task = await get_task_by_id(task_id)
-                if not task or task.get('active') != 1:
-                    logger.info(f"⏭️ Task {task_id} is not active, skipping")
-                    continue
-                
                 # Vaqtni parse qilish
                 try:
                     # start_time faqat boshlanish vaqti (masalan "17:00")
@@ -106,11 +100,6 @@ async def send_task_reminder(bot: Bot, user_id: int, task_id: int, task_name: st
         task = await get_task_by_id(task_id)
         if not task:
             logger.error(f"Task {task_id} not found")
-            return
-        
-        # Task aktiv ekanligini qayta tekshirish
-        if task.get('active') != 1:
-            logger.info(f"Task {task_id} is not active, skipping reminder")
             return
         
         # Start_time formatidan end_time ni olish
