@@ -33,7 +33,7 @@ async def check_and_send_reminders(bot: Bot):
     jadvalini tekshirish va eslatma yuborish
     """
     try:
-        from utils.database import get_all_users, get_user_schedule_for_today
+        from utils.database import get_all_users, get_user_schedule_for_today, get_task_by_id
         
         # TASHKENT VAQTI bilan ishlash
         current_time = datetime.now(TASHKENT_TZ)
@@ -47,6 +47,7 @@ async def check_and_send_reminders(bot: Bot):
         
         # Barcha foydalanuvchilarni olish
         users = await get_all_users()
+        logger.info(f"👥 Total users: {len(users)}")
         
         for user in users:
             user_id = user['user_id']
@@ -60,8 +61,18 @@ async def check_and_send_reminders(bot: Bot):
             for item in schedule:
                 start_time = item['start_time']
                 end_time = item.get('end_time', 'N/A')
-                task_name = item['task_name']
-                task_id = item['task_id']
+                task_name = item.get('task_name', 'Unknown')
+                task_id = item.get('task_id')
+                
+                if not task_id:
+                    logger.warning(f"⚠️ Schedule item without task_id: {item}")
+                    continue
+                
+                # Vazifa aktiv ekanligini tekshirish
+                task = await get_task_by_id(task_id)
+                if not task or task.get('active') != 1:
+                    logger.info(f"⏭️ Task {task_id} is not active, skipping")
+                    continue
                 
                 # Vaqtni parse qilish
                 try:
@@ -89,14 +100,17 @@ async def send_task_reminder(bot: Bot, user_id: int, task_id: int, task_name: st
     """
     try:
         from utils.database import create_focus_session, get_task_by_id
-        from aiogram.fsm.context import FSMContext
-        from aiogram.fsm.storage.base import StorageKey
         from handlers.focus_keeper import FocusState
         
         # Task ma'lumotlarini olish
         task = await get_task_by_id(task_id)
         if not task:
             logger.error(f"Task {task_id} not found")
+            return
+        
+        # Task aktiv ekanligini qayta tekshirish
+        if task.get('active') != 1:
+            logger.info(f"Task {task_id} is not active, skipping reminder")
             return
         
         # Start_time formatidan end_time ni olish
@@ -135,12 +149,27 @@ async def send_task_reminder(bot: Bot, user_id: int, task_id: int, task_name: st
             planned_duration=duration_minutes
         )
         
-        # FSM state o'rnatish - MUHIM!
-        from bot import dp
-        storage_key = StorageKey(bot_id=bot.id, chat_id=user_id, user_id=user_id)
-        state = FSMContext(storage=dp.storage, key=storage_key)
-        await state.set_state(FocusState.waiting_for_photo)
-        await state.update_data(session_id=session_id, task_id=task_id, task_name=task_name)
+        # FSM state o'rnatish
+        try:
+            # Bot modulidan dispatcher ni import qilish
+            import sys
+            if 'bot' in sys.modules:
+                bot_module = sys.modules['bot']
+                if hasattr(bot_module, 'dp'):
+                    from aiogram.fsm.context import FSMContext
+                    from aiogram.fsm.storage.base import StorageKey
+                    
+                    storage_key = StorageKey(bot_id=bot.id, chat_id=user_id, user_id=user_id)
+                    state = FSMContext(storage=bot_module.dp.storage, key=storage_key)
+                    await state.set_state(FocusState.waiting_for_photo)
+                    await state.update_data(session_id=session_id, task_id=task_id, task_name=task_name)
+                    logger.info(f"FSM state set for user {user_id}, session {session_id}")
+                else:
+                    logger.warning("Dispatcher not found in bot module")
+            else:
+                logger.warning("Bot module not loaded yet")
+        except Exception as e:
+            logger.error(f"Error setting FSM state: {e}")
         
         message = (
             f"⏰ **VAZIFA VAQTI KELDI!**\n\n"
@@ -169,7 +198,7 @@ async def send_task_reminder(bot: Bot, user_id: int, task_id: int, task_name: st
             parse_mode="Markdown"
         )
         
-        logger.info(f"Task reminder sent to user {user_id} for task {task_id}, session {session_id}")
+        logger.info(f"✅ Task reminder sent to user {user_id} for task {task_id}, session {session_id}")
         
         # CHEKSIZ BILDIRISHNOMALARNI BOSHLASH
         await start_continuous_notifications(
@@ -203,12 +232,12 @@ async def send_task_reminder(bot: Bot, user_id: int, task_id: int, task_name: st
                     replace_existing=False
                 )
                 
-                logger.info(f"Completion check scheduled for {end_datetime}")
+                logger.info(f"📅 Completion check scheduled for {end_datetime}")
         except Exception as e:
             logger.error(f"Error scheduling completion reminder: {e}")
         
     except Exception as e:
-        logger.error(f"Error sending reminder to {user_id}: {e}", exc_info=True)
+        logger.error(f"❌ Error sending reminder to {user_id}: {e}", exc_info=True)
 
 async def send_focus_keeper(bot: Bot, user_id: int, task_name: str):
     """

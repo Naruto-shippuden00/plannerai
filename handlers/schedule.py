@@ -110,6 +110,8 @@ def format_schedule_preview(schedule: dict) -> str:
     for day_eng, items in schedule.items():
         if day_eng == "sunday":
             continue  # Yakshanba review kuni
+        if not isinstance(items, list):
+            continue
         for item in items:
             total_sessions += 1
             task_name = item.get('task', 'N/A')
@@ -118,17 +120,21 @@ def format_schedule_preview(schedule: dict) -> str:
     # Haftalik statistika
     text = "📊 **HAFTALIK JADVAL STATISTIKASI:**\n\n"
     text += f"📚 Jami sessionlar: {total_sessions}\n"
-    text += f"📝 Har bir vazifa:\n"
-    for task, count in sorted(task_frequency.items(), key=lambda x: x[1], reverse=True):
-        text += f"   • {task}: {count}x haftada\n"
+    if task_frequency:
+        text += f"📝 Har bir vazifa:\n"
+        for task, count in sorted(task_frequency.items(), key=lambda x: x[1], reverse=True):
+            text += f"   • {task}: {count}x haftada\n"
     text += f"\n{'='*30}\n\n"
     
     # Bugungi kunni aniqlash (TASHKENT VAQTI)
-    current_day = datetime.now(TASHKENT_TZ).strftime("%A").lower()
+    # weekday() qaytaradi: 0=Monday, 1=Tuesday, ..., 6=Sunday
+    current_day_num = datetime.now(TASHKENT_TZ).weekday()
+    day_map = {0: "monday", 1: "tuesday", 2: "wednesday", 3: "thursday", 4: "friday", 5: "saturday", 6: "sunday"}
+    current_day = day_map.get(current_day_num, "monday")
     
     # Kunlik jadval
     for day_eng, day_uz in day_names.items():
-        if day_eng in schedule and schedule[day_eng]:
+        if day_eng in schedule and schedule[day_eng] and isinstance(schedule[day_eng], list):
             # Bugungi kunni belgilash
             emoji = "📍" if day_eng == current_day else "📅"
             text += f"\n{emoji} **{day_uz}**"
