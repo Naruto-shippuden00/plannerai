@@ -1,11 +1,12 @@
 """
-Focus Keeper - Vazifalarni bajarish vaqtida to'liq nazorat
+Focus Keeper - Vazifalarni bajarish vaqtida to'liq nazorat (OPTIMIZED)
 """
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import asyncio
 import os
 import logging
@@ -19,19 +20,28 @@ from utils.database import (
     set_camera_permission,
     add_punishment,
     mark_task_as_completed,
-    get_user_tasks
+    get_user_tasks,
+    add_achievement,
+    update_user_statistics
 )
 from utils.keyboards import (
     focus_action_keyboard,
     main_menu_keyboard,
-    camera_permission_keyboard
+    camera_permission_keyboard,
+    break_time_keyboard
 )
 
 router = Router()
 logger = logging.getLogger(__name__)
 
+# Tashkent timezone
+TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
+
 # Aktiv bildirishnomalar uchun tracking
-active_notifications = {}  # {user_id: {'task': asyncio.Task, 'session_id': int, 'count': int}}
+active_notifications = {}  # {user_id: {'task': asyncio.Task, 'session_id': int, 'count': int, 'started_at': datetime}}
+
+# Aktiv Pomodoro sessiyalar
+active_pomodoro = {}  # {user_id: {'task': asyncio.Task, 'session_id': int, 'started_at': datetime}}
 
 class FocusState(StatesGroup):
     waiting_for_photo = State()
@@ -80,56 +90,71 @@ async def continuous_notification_sender(bot, user_id: int, session_id: int, tas
     """
     Cheksiz bildirishnoma yuborish - faqat rasm yuborilganda to'xtaydi
     Har 5 minutda bir marta bildirishnoma
+    
+    OPTIMIZED VERSION - better tracking and error handling
     """
     count = 0
     max_notifications = 100  # Xavfsizlik uchun maksimal limit
+    notification_interval = 300  # 5 daqiqa (sekundlarda)
     
-    logger.info(f"Starting continuous notifications for user {user_id}, session {session_id}")
+    started_at = datetime.now(TASHKENT_TZ)
+    
+    logger.info(
+        f"🔔 Starting continuous notifications: user={user_id}, session={session_id}, "
+        f"task='{task_name}', interval={notification_interval}s"
+    )
     
     try:
         while count < max_notifications:
             # Agar user rasm yuborgan bo'lsa, to'xtatamiz
             if user_id not in active_notifications:
-                logger.info(f"Notifications stopped for user {user_id} - photo submitted")
+                logger.info(f"✅ Notifications stopped for user {user_id} - photo submitted or manually stopped")
                 break
             
             count += 1
+            elapsed_minutes = int((datetime.now(TASHKENT_TZ) - started_at).total_seconds() / 60)
             
             # Bildirishnoma turli-tuman bo'lishi uchun
-            messages = [
-                f"⏰ **VAZIFA VAQTI!** ({count}-eslatma)\n\n"
-                f"🎯 {task_name}\n"
-                f"🕐 {start_time} - {end_time}\n\n"
-                f"❗️ DIQQAT: Bildirishnoma to'xtatish uchun vazifa RASMINI yuboring!\n\n"
-                f"📸 Rasm turlaridan biri:\n"
-                f"• Dars jarayoningiz\n"
-                f"• Bajarayotgan vazifangiz\n"
-                f"• Mashq daftaringiz\n"
-                f"• Ish statingiz\n\n"
-                f"⚠️ Rasm yubormasangiz, bildirishnomalar davom etadi!",
-                
-                f"🔔 **{count}-CHI ESLATMA!**\n\n"
-                f"🎯 Vazifa: {task_name}\n\n"
-                f"Sizdan hali ham rasm kutilmoqda! 📸\n\n"
-                f"Agar hozir ishlamayotgan bo'lsangiz, bu vazifani bajarmagangiz hisoblanadi!\n\n"
-                f"❌ Natija: Jazo olasiz!\n\n"
-                f"✅ Tezroq rasm yuboring va fokusga kiring!",
-                
-                f"🚨 **MUHIM OGOHLANTIRISH!** ({count}/∞)\n\n"
-                f"🎯 {task_name}\n\n"
-                f"Siz hali ham ishlamayapsizmi?\n\n"
-                f"⏰ Vaqt o'tyapti!\n"
-                f"📸 Tezroq rasm yuboring!\n\n"
-                f"Bu bildirishnomalar RASM yuborguningizgacha davom etadi!\n\n"
-                f"💪 Boshladingizmi? Rasmni yuboring!",
-            ]
-            
-            # Xabar turini tanlash (3 dan boshlab random)
-            if count <= 3:
-                message = messages[0]
-            elif count <= 10:
-                message = messages[1]
+            if count == 1:
+                message = (
+                    f"⏰ **VAZIFA VAQTI!** (1-eslatma)\n\n"
+                    f"🎯 {task_name}\n"
+                    f"🕐 {start_time} - {end_time}\n\n"
+                    f"❗️ DIQQAT: Bildirishnomani to'xtatish uchun vazifa RASMINI yuboring!\n\n"
+                    f"📸 Rasm turlaridan biri:\n"
+                    f"• Dars jarayoningiz\n"
+                    f"• Bajarayotgan vazifangiz\n"
+                    f"• Mashq daftaringiz\n"
+                    f"• Ish statingiz\n\n"
+                    f"⚠️ Rasm yubormasangiz, bildirishnomalar davom etadi!"
+                )
+            elif count <= 3:
+                message = (
+                    f"🔔 **{count}-CHI ESLATMA!**\n\n"
+                    f"🎯 Vazifa: {task_name}\n"
+                    f"⏱ O'tgan vaqt: {elapsed_minutes} daqiqa\n\n"
+                    f"Sizdan hali ham rasm kutilmoqda! 📸\n\n"
+                    f"Agar hozir ishlamayotgan bo'lsangiz, bu vazifani bajarmagangiz hisoblanadi!\n\n"
+                    f"❌ Natija: Jazo olasiz!\n\n"
+                    f"✅ Tezroq rasm yuboring va fokusga kiring!"
+                )
+            elif count <= 6:
+                message = (
+                    f"🚨 **MUHIM OGOHLANTIRISH!** ({count}/∞)\n\n"
+                    f"🎯 {task_name}\n"
+                    f"⏱ {elapsed_minutes} daqiqa o'tdi!\n\n"
+                    f"Siz hali ham ishlamayapsizmi?\n\n"
+                    f"📸 TEZROQ rasm yuboring!\n\n"
+                    f"Bu bildirishnomalar RASM yuborguningizgacha davom etadi!\n\n"
+                    f"💪 Boshladingizmi? Rasmni yuboring!"
+                )
             else:
+                # 6 dan keyin random messages
+                messages = [
+                    f"⚠️ **ESLATMA #{count}**\n\n🎯 {task_name}\n⏱ {elapsed_minutes} min\n\n📸 Rasm yuboring!",
+                    f"🔥 **FOKUSGA KIRING!** ({count})\n\n{task_name}\n\n📸 Vazifa rasmini yuboring!",
+                    f"💪 **HARAKATGA O'TING!** (#{count})\n\n⏱ {elapsed_minutes} daqiqa!\n📸 Rasm kerak!"
+                ]
                 import random
                 message = random.choice(messages)
             
@@ -139,59 +164,96 @@ async def continuous_notification_sender(bot, user_id: int, session_id: int, tas
                     text=message,
                     parse_mode="Markdown"
                 )
-                logger.info(f"Notification #{count} sent to user {user_id}")
+                logger.info(f"📨 Notification #{count} sent to user {user_id} (elapsed: {elapsed_minutes}m)")
             except Exception as e:
-                logger.error(f"Error sending notification to {user_id}: {e}")
+                logger.error(f"❌ Error sending notification #{count} to user {user_id}: {e}")
+                # Agar xabar yuborishda xatolik bo'lsa, user block qilgan bo'lishi mumkin
+                if "bot was blocked" in str(e).lower() or "user is deactivated" in str(e).lower():
+                    logger.warning(f"⚠️ User {user_id} has blocked the bot. Stopping notifications.")
+                    break
             
-            # 5 daqiqa kutish
-            await asyncio.sleep(300)  # 300 sekund = 5 daqiqa
+            # Keyingi bildirishnomaga kutish
+            await asyncio.sleep(notification_interval)
             
     except asyncio.CancelledError:
-        logger.info(f"Notification task cancelled for user {user_id}")
+        logger.info(f"🛑 Notification task cancelled for user {user_id} (session {session_id})")
+        raise
     except Exception as e:
-        logger.error(f"Error in continuous notifications for user {user_id}: {e}")
+        logger.error(f"❌ Error in continuous notifications for user {user_id}: {e}", exc_info=True)
     finally:
         # Tozalash
         if user_id in active_notifications:
             del active_notifications[user_id]
+            logger.info(f"🧹 Cleaned up notification tracking for user {user_id}")
 
 async def start_continuous_notifications(bot, user_id: int, session_id: int, task_name: str, start_time: str, end_time: str):
-    """Cheksiz bildirishnomalarni boshlash"""
+    """
+    Cheksiz bildirishnomalarni boshlash
+    
+    OPTIMIZED VERSION
+    """
     # Agar avvalgi bildirishnomalar bo'lsa, to'xtatamiz
     if user_id in active_notifications:
+        logger.info(f"⚠️ Stopping previous notifications for user {user_id}")
         active_notifications[user_id]['task'].cancel()
+        # Bir oz kutamiz cancel bo'lishi uchun
+        await asyncio.sleep(0.1)
     
     # Yangi task yaratish
-    task = asyncio.create_task(
-        continuous_notification_sender(bot, user_id, session_id, task_name, start_time, end_time)
-    )
-    
-    active_notifications[user_id] = {
-        'task': task,
-        'session_id': session_id,
-        'count': 0
-    }
-    
-    logger.info(f"Continuous notifications started for user {user_id}, session {session_id}")
+    try:
+        task = asyncio.create_task(
+            continuous_notification_sender(bot, user_id, session_id, task_name, start_time, end_time)
+        )
+        
+        active_notifications[user_id] = {
+            'task': task,
+            'session_id': session_id,
+            'count': 0,
+            'started_at': datetime.now(TASHKENT_TZ)
+        }
+        
+        logger.info(f"✅ Continuous notifications started: user={user_id}, session={session_id}")
+    except Exception as e:
+        logger.error(f"❌ Error starting notifications for user {user_id}: {e}", exc_info=True)
 
 async def stop_continuous_notifications(user_id: int):
-    """Bildirishnomalarni to'xtatish"""
+    """
+    Bildirishnomalarni to'xtatish
+    
+    OPTIMIZED VERSION
+    """
     if user_id in active_notifications:
-        active_notifications[user_id]['task'].cancel()
-        del active_notifications[user_id]
-        logger.info(f"Continuous notifications stopped for user {user_id}")
+        try:
+            active_notifications[user_id]['task'].cancel()
+            # Task cancel bo'lishini kutamiz
+            try:
+                await asyncio.wait_for(active_notifications[user_id]['task'], timeout=1.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+            
+            del active_notifications[user_id]
+            logger.info(f"✅ Notifications stopped for user {user_id}")
+        except Exception as e:
+            logger.error(f"❌ Error stopping notifications for user {user_id}: {e}")
+    else:
+        logger.debug(f"ℹ️ No active notifications for user {user_id}")
 
 @router.message(FocusState.waiting_for_photo, F.photo)
 async def receive_focus_photo(message: Message, state: FSMContext):
     """
     Focus vaqtida rasm qabul qilish - bildirishnomalarni to'xtatadi
+    
+    OPTIMIZED VERSION - better error handling and user feedback
     """
     user_id = message.from_user.id
+    
+    logger.info(f"📸 Photo received from user {user_id}")
     
     # Aktiv sessionni olish
     active_session = await get_active_focus_session(user_id)
     
     if not active_session:
+        logger.warning(f"⚠️ No active session for user {user_id}")
         await message.answer(
             "⚠️ Aktiv focus session topilmadi!\n\n"
             "📋 Jadvalingizdan vazifa boshlang.",
@@ -200,40 +262,63 @@ async def receive_focus_photo(message: Message, state: FSMContext):
         await state.clear()
         return
     
+    session_id = active_session['id']
+    task_name = active_session.get('task_name', 'Unknown')
+    
     # Rasmni saqlash
     photo = message.photo[-1]
     photo_dir = "data/focus_photos"
-    os.makedirs(photo_dir, exist_ok=True)
     
-    file_name = f"{user_id}_{active_session['id']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+    try:
+        os.makedirs(photo_dir, exist_ok=True)
+    except Exception as e:
+        logger.error(f"Error creating photo directory: {e}")
+    
+    file_name = f"{user_id}_{session_id}_{datetime.now(TASHKENT_TZ).strftime('%Y%m%d_%H%M%S')}.jpg"
     photo_path = os.path.join(photo_dir, file_name)
     
     try:
-        await message.bot.download(photo.file_id, photo_path)
+        # Rasmni yuklab olish
+        file = await message.bot.get_file(photo.file_id)
+        await message.bot.download_file(file.file_path, photo_path)
+        
+        logger.info(f"📥 Photo saved: {photo_path}")
         
         # Rasmni bazaga saqlash
-        await add_focus_photo(active_session['id'], photo_path)
+        await add_focus_photo(session_id, photo_path)
         
         # MUHIM: Bildirishnomalarni to'xtatish
         await stop_continuous_notifications(user_id)
         
+        # Photo count
+        from utils.database import get_focus_session_photos
+        photos = await get_focus_session_photos(session_id)
+        photo_count = len(photos)
+        
+        # Achievement check - birinchi rasm
+        if photo_count == 1:
+            await add_achievement(user_id, "first_photo", "Birinchi vazifa rasmi")
+        
         await message.answer(
-            "✅ **RASM QABUL QILINDI!**\n\n"
-            "🎉 Ajoyib! Bildirishnomalar to'xtatildi!\n\n"
-            "⏱ Endi **POMODORO TIMER** boshlanadi!\n\n"
-            "📊 Sizda 1 soatlik fokus sessiya bor.\n"
-            "🔥 Men sizni nazorat qilib turaman!\n\n"
-            "💪 Fokusda qoling va muvaffaqiyatga erishing!",
+            f"✅ **RASM QABUL QILINDI!** ({photo_count}-rasm)\n\n"
+            f"🎉 Ajoyib! Bildirishnomalar to'xtatildi!\n\n"
+            f"⏱ Endi **POMODORO TIMER** boshlanadi!\n\n"
+            f"📊 Sizda {active_session['planned_duration']} daqiqalik fokus sessiya bor.\n"
+            f"🔥 Men sizni nazorat qilib turaman!\n\n"
+            f"💪 Fokusda qoling va muvaffaqiyatga erishing!",
             parse_mode="Markdown"
         )
         
         # Pomodoro timerni boshlash
         await start_pomodoro_session(message.bot, user_id, active_session)
         
+        # State tozalash
         await state.clear()
         
+        logger.info(f"✅ Photo processed successfully for user {user_id}, session {session_id}")
+        
     except Exception as e:
-        logger.error(f"Error saving focus photo: {e}")
+        logger.error(f"❌ Error saving focus photo for user {user_id}: {e}", exc_info=True)
         await message.answer(
             "❌ Rasmni saqlashda xatolik!\n\n"
             "Iltimos, qayta urinib ko'ring.",
@@ -252,26 +337,40 @@ async def wrong_content_during_focus(message: Message):
 
 async def start_pomodoro_session(bot, user_id: int, session_data: dict):
     """
-    Pomodoro timer - 1 soat focus + har 15 daqiqada nazorat
+    Pomodoro timer - planned_duration focus + har 15 daqiqada nazorat
+    
+    OPTIMIZED VERSION - dynamic duration, better tracking
     """
     session_id = session_data['id']
     task_name = session_data['task_name']
     planned_duration = session_data['planned_duration']
     
-    logger.info(f"Starting Pomodoro session for user {user_id}, session {session_id}, duration {planned_duration} min")
+    logger.info(
+        f"🍅 Starting Pomodoro session: user={user_id}, session={session_id}, "
+        f"task='{task_name}', duration={planned_duration}min"
+    )
+    
+    # Avvalgi Pomodoro sessiyani to'xtatish
+    if user_id in active_pomodoro:
+        logger.warning(f"⚠️ Stopping previous Pomodoro for user {user_id}")
+        active_pomodoro[user_id]['task'].cancel()
+        await asyncio.sleep(0.1)
     
     # Darhol xabar yuborish
-    await bot.send_message(
-        user_id,
-        f"🍅 **POMODORO TIMER BOSHLANDI!**\n\n"
-        f"🎯 Vazifa: {task_name}\n"
-        f"⏱ Davomiyligi: {planned_duration} daqiqa\n\n"
-        f"📱 Telefon: Silent mode\n"
-        f"🔕 Notificationlar: O'chirilgan\n"
-        f"💻 Faqat vazifa: Fokus 100%\n\n"
-        f"🚀 Boshlang! Men sizni nazorat qilaman!",
-        parse_mode="Markdown"
-    )
+    try:
+        await bot.send_message(
+            user_id,
+            f"🍅 **POMODORO TIMER BOSHLANDI!**\n\n"
+            f"🎯 Vazifa: {task_name}\n"
+            f"⏱ Davomiyligi: {planned_duration} daqiqa\n\n"
+            f"📱 Telefon: Silent mode\n"
+            f"🔕 Notificationlar: O'chirilgan\n"
+            f"💻 Faqat vazifa: Fokus 100%\n\n"
+            f"🚀 Boshlang! Men sizni nazorat qilaman!",
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        logger.error(f"Error sending Pomodoro start message: {e}")
     
     # Har 15 daqiqada focus keeper xabarlari
     # Lekin faqat planned_duration ichida
@@ -279,24 +378,46 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
     for interval in range(15, planned_duration, 15):
         check_intervals.append(interval)
     
+    logger.info(f"📋 Scheduled {len(check_intervals)} check intervals: {check_intervals}")
+    
     # Har bir intervalda nazorat qilish
     for interval in check_intervals:
         asyncio.create_task(
             send_pomodoro_check(bot, user_id, task_name, interval, session_id)
         )
     
-    # Asosiy timer - vazifa tugaganda
-    asyncio.create_task(
+    # Asosiy Pomodoro timer task
+    pomodoro_task = asyncio.create_task(
         finish_pomodoro_session(bot, user_id, session_id, task_name, planned_duration)
     )
+    
+    # Tracking
+    active_pomodoro[user_id] = {
+        'task': pomodoro_task,
+        'session_id': session_id,
+        'started_at': datetime.now(TASHKENT_TZ)
+    }
+    
+    logger.info(f"✅ Pomodoro session fully initialized for user {user_id}")
 
 async def send_pomodoro_check(bot, user_id: int, task_name: str, after_minutes: int, session_id: int):
-    """Pomodoro davomida tekshirish xabarlari - har 15 daqiqada"""
+    """
+    Pomodoro davomida tekshirish xabarlari - har 15 daqiqada
+    
+    OPTIMIZED VERSION
+    """
     await asyncio.sleep(after_minutes * 60)  # Kutish
     
+    logger.info(f"📊 Pomodoro check at {after_minutes}min for user {user_id}, session {session_id}")
+    
     # Session hali ham aktiv ekanligini tekshirish
-    active = await get_active_focus_session(user_id)
-    if not active or active['id'] != session_id:
+    try:
+        active = await get_active_focus_session(user_id)
+        if not active or active['id'] != session_id:
+            logger.info(f"ℹ️ Session {session_id} no longer active. Skipping check.")
+            return
+    except Exception as e:
+        logger.error(f"Error checking active session: {e}")
         return
     
     # Har bir 15 daqiqa uchun turli xabarlar
@@ -330,22 +451,46 @@ async def send_pomodoro_check(bot, user_id: int, task_name: str, after_minutes: 
                 f"📸 Iltimos, hozirgi holatni tasdiqlovchi rasm yuboring!",
                 parse_mode="Markdown"
             )
+            logger.info(f"📸 Camera check requested at {after_minutes}min")
         else:
             await bot.send_message(user_id, message, parse_mode="Markdown")
         
-        logger.info(f"Pomodoro check sent at {after_minutes} min for user {user_id}")
+        logger.info(f"✅ Pomodoro check sent at {after_minutes}min for user {user_id}")
     except Exception as e:
-        logger.error(f"Error sending Pomodoro check to {user_id}: {e}")
+        logger.error(f"❌ Error sending Pomodoro check to user {user_id}: {e}")
 
 async def finish_pomodoro_session(bot, user_id: int, session_id: int, task_name: str, duration_minutes: int):
-    """Pomodoro sessionni yakunlash va tanaffus berish"""
+    """
+    Pomodoro sessionni yakunlash va tanaffus berish
+    
+    OPTIMIZED VERSION - achievements, statistics
+    """
+    logger.info(f"⏱ Waiting {duration_minutes}min for session {session_id} to complete...")
+    
     # Duration minutes davom etish
     await asyncio.sleep(duration_minutes * 60)
     
+    logger.info(f"🏁 Pomodoro session completed: user={user_id}, session={session_id}")
+    
     # Session tugallash
-    await end_focus_session(session_id, completed=True)
+    try:
+        await end_focus_session(session_id, completed=True)
+        
+        # Statistikani yangilash
+        await update_user_statistics(user_id)
+        
+        # Achievement check
+        await add_achievement(user_id, "completed_focus", f"Fokus sessiya tugallandi: {task_name}")
+        
+    except Exception as e:
+        logger.error(f"Error ending focus session: {e}")
+    
+    # Tracking tozalash
+    if user_id in active_pomodoro:
+        del active_pomodoro[user_id]
     
     try:
+        # Tugallanganlik xabari
         await bot.send_message(
             user_id,
             f"🎉 **VAZIFA TUGADI!**\n\n"
@@ -355,10 +500,14 @@ async def finish_pomodoro_session(bot, user_id: int, session_id: int, task_name:
             f"🧘‍♂️ Endi 10 daqiqa TANAFFUS!\n\n"
             f"☕️ Choy iching\n"
             f"🚶‍♂️ Biroz yuring\n"
-            f"💧 Suv iching\n\n"
+            f"💧 Suv iching\n"
+            f"👀 Ko'zingizni dam oldiring\n\n"
             f"⏰ 10 daqiqadan keyin keyingi vazifaga o'tamiz!",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
+            reply_markup=break_time_keyboard()
         )
+        
+        logger.info(f"✅ Completion message sent to user {user_id}")
         
         # 10 daqiqa tanaffus
         await asyncio.sleep(600)  # 10 minut
@@ -374,41 +523,61 @@ async def finish_pomodoro_session(bot, user_id: int, session_id: int, task_name:
             reply_markup=main_menu_keyboard()
         )
         
+        logger.info(f"✅ Break finished message sent to user {user_id}")
+        
     except Exception as e:
-        logger.error(f"Error finishing Pomodoro session for {user_id}: {e}")
+        logger.error(f"❌ Error finishing Pomodoro session for user {user_id}: {e}", exc_info=True)
 
 @router.callback_query(F.data.startswith("end_focus_"))
 async def end_focus_early(callback: CallbackQuery):
-    """Focus sessionni erta tugatish"""
-    session_id = int(callback.data.split("_")[2])
-    user_id = callback.from_user.id
+    """
+    Focus sessionni erta tugatish
     
-    # Bildirishnomalarni to'xtatish
-    await stop_continuous_notifications(user_id)
-    
-    # Sessionni tugatish
-    await end_focus_session(session_id, completed=False)
-    
-    # Jazo berish
-    active_session = await get_active_focus_session(user_id)
-    if active_session:
-        await add_punishment(
-            user_id,
-            active_session['task_id'],
-            session_id,
-            "early_exit",
-            "Vazifani vaqtidan oldin to'xtatdi"
+    OPTIMIZED VERSION
+    """
+    try:
+        session_id = int(callback.data.split("_")[2])
+        user_id = callback.from_user.id
+        
+        logger.info(f"⏹ User {user_id} requesting early end of session {session_id}")
+        
+        # Bildirishnomalarni to'xtatish
+        await stop_continuous_notifications(user_id)
+        
+        # Pomodoro'ni to'xtatish
+        if user_id in active_pomodoro:
+            active_pomodoro[user_id]['task'].cancel()
+            del active_pomodoro[user_id]
+        
+        # Sessionni tugatish
+        await end_focus_session(session_id, completed=False)
+        
+        # Jazo berish
+        active_session = await get_active_focus_session(user_id)
+        if active_session:
+            await add_punishment(
+                user_id,
+                active_session['task_id'],
+                session_id,
+                "early_exit",
+                "Vazifani vaqtidan oldin to'xtatdi"
+            )
+        
+        await callback.message.edit_text(
+            "⚠️ **FOCUS SESSION TO'XTATILDI!**\n\n"
+            "❌ Siz vazifani to'liq bajarmadingiz.\n\n"
+            "🔴 Jazo: Vazifani qayta bajarish kerak\n\n"
+            "📊 Statistikangizga ta'sir qiladi!\n\n"
+            "💪 Keyingi safar to'liq bajaring!",
+            parse_mode="Markdown"
         )
-    
-    await callback.message.edit_text(
-        "⚠️ **FOCUS SESSION TO'XTATILDI!**\n\n"
-        "❌ Siz vazifani to'liq bajarmadingiz.\n\n"
-        "🔴 Jazo: 1 ball kamaytrildi\n\n"
-        "📊 Statistikangizga ta'sir qiladi!\n\n"
-        "💪 Keyingi safar to'liq bajaring!",
-        parse_mode="Markdown"
-    )
-    await callback.answer()
+        await callback.answer("Session to'xtatildi")
+        
+        logger.info(f"✅ Session {session_id} terminated early by user {user_id}")
+        
+    except Exception as e:
+        logger.error(f"Error ending focus session early: {e}", exc_info=True)
+        await callback.answer("Xatolik yuz berdi!", show_alert=True)
 
 @router.message(F.text == "📸 Kamera Ruxsati")
 async def camera_permission_request(message: Message):
@@ -466,5 +635,27 @@ async def handle_camera_permission(callback: CallbackQuery):
     
     await callback.answer()
 
+@router.callback_query(F.data.startswith("break_"))
+async def handle_break_activity(callback: CallbackQuery):
+    """Tanaffus vaqtidagi faoliyatlarni tracking"""
+    activity = callback.data.split("_")[1]
+    
+    activity_messages = {
+        "tea": "☕️ Choydan bahramand bo'ling!",
+        "walk": "🚶‍♂️ Yaxshi sayr qiling!",
+        "water": "💧 Suv ichish juda foydali!",
+        "rest": "🧘‍♂️ Yaxshi dam oling!"
+    }
+    
+    message = activity_messages.get(activity, "Dam oling!")
+    
+    await callback.answer(message, show_alert=True)
+    logger.info(f"Break activity logged: user={callback.from_user.id}, activity={activity}")
+
 # Eksport qilish uchun
-__all__ = ['router', 'start_continuous_notifications', 'stop_continuous_notifications']
+__all__ = [
+    'router', 
+    'start_continuous_notifications', 
+    'stop_continuous_notifications',
+    'FocusState'
+]
