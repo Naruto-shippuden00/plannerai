@@ -243,7 +243,7 @@ async def receive_focus_photo(message: Message, state: FSMContext):
     """
     Focus vaqtida rasm qabul qilish - bildirishnomalarni to'xtatadi
     
-    OPTIMIZED VERSION - better error handling and user feedback
+    FIX: Task name va ma'lumotlarni to'g'ri olish
     """
     user_id = message.from_user.id
     
@@ -263,7 +263,15 @@ async def receive_focus_photo(message: Message, state: FSMContext):
         return
     
     session_id = active_session['id']
-    task_name = active_session.get('task_name', 'Unknown')
+    task_id = active_session.get('task_id', 0)
+    planned_duration = active_session.get('planned_duration', 60)
+    
+    # Task ma'lumotlarini to'g'ri olish
+    from utils.database import get_task_by_id
+    task_info = await get_task_by_id(task_id) if task_id else None
+    task_name = task_info.get('task_name', 'Unknown Task') if task_info else 'Unknown Task'
+    
+    logger.info(f"📋 Task info: task_id={task_id}, name='{task_name}'")
     
     # Rasmni saqlash
     photo = message.photo[-1]
@@ -289,6 +297,7 @@ async def receive_focus_photo(message: Message, state: FSMContext):
         
         # MUHIM: Bildirishnomalarni to'xtatish
         await stop_continuous_notifications(user_id)
+        logger.info(f"🔕 Notifications stopped for user {user_id}")
         
         # Photo count
         from utils.database import get_focus_session_photos
@@ -297,20 +306,32 @@ async def receive_focus_photo(message: Message, state: FSMContext):
         
         # Achievement check - birinchi rasm
         if photo_count == 1:
-            await add_achievement(user_id, "first_photo", "Birinchi vazifa rasmi")
+            try:
+                await add_achievement(user_id, "first_photo", "Birinchi vazifa rasmi")
+            except Exception as e:
+                logger.warning(f"Could not add achievement: {e}")
         
         await message.answer(
             f"✅ **RASM QABUL QILINDI!** ({photo_count}-rasm)\n\n"
             f"🎉 Ajoyib! Bildirishnomalar to'xtatildi!\n\n"
             f"⏱ Endi **POMODORO TIMER** boshlanadi!\n\n"
-            f"📊 Sizda {active_session['planned_duration']} daqiqalik fokus sessiya bor.\n"
+            f"📊 Sizda {planned_duration} daqiqalik fokus sessiya bor.\n"
             f"🔥 Men sizni nazorat qilib turaman!\n\n"
             f"💪 Fokusda qoling va muvaffaqiyatga erishing!",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
+            reply_markup=main_menu_keyboard()
         )
         
+        # Session data'ni to'ldirish Pomodoro uchun
+        session_with_task = {
+            'id': session_id,
+            'task_id': task_id,
+            'task_name': task_name,
+            'planned_duration': planned_duration
+        }
+        
         # Pomodoro timerni boshlash
-        await start_pomodoro_session(message.bot, user_id, active_session)
+        await start_pomodoro_session(message.bot, user_id, session_with_task)
         
         # State tozalash
         await state.clear()

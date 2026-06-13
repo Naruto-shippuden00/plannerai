@@ -696,19 +696,31 @@ async def create_focus_session(user_id: int, task_id: int, schedule_id: int, pla
         return cursor.lastrowid
 
 async def get_active_focus_session(user_id: int) -> Optional[Dict]:
-    """Foydalanuvchining aktiv focus sessionini olish"""
+    """
+    Foydalanuvchining aktiv focus sessionini olish
+    
+    FIX: Task ma'lumotlarini xavfsiz olish
+    """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("""
-            SELECT fs.*, t.task_name, t.category
+            SELECT fs.*, 
+                   COALESCE(t.task_name, 'Unknown Task') as task_name, 
+                   COALESCE(t.category, 'Unknown') as category
             FROM focus_sessions fs
-            JOIN tasks t ON fs.task_id = t.id
+            LEFT JOIN tasks t ON fs.task_id = t.id
             WHERE fs.user_id = ? AND fs.status = 'active'
             ORDER BY fs.session_start DESC
             LIMIT 1
         """, (user_id,)) as cursor:
             row = await cursor.fetchone()
-            return dict(row) if row else None
+            if row:
+                result = dict(row)
+                logger.debug(f"Active session found: user={user_id}, session={result.get('id')}, task={result.get('task_name')}")
+                return result
+            else:
+                logger.debug(f"No active session for user {user_id}")
+                return None
 
 async def end_focus_session(session_id: int, completed: bool = True):
     """Focus sessionni yakunlash"""
