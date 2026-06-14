@@ -473,19 +473,38 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
         active_pomodoro[user_id]['task'].cancel()
         await asyncio.sleep(0.1)
     
-    # Darhol xabar yuborish
+    # Darhol xabar yuborish va PIN qilish
     try:
-        await bot.send_message(
+        # Timer xabari
+        timer_message = await bot.send_message(
             user_id,
             f"🍅 **POMODORO TIMER BOSHLANDI!**{test_mode_indicator}\n\n"
             f"🎯 Vazifa: {task_name}\n"
-            f"⏱ Davomiyligi: {planned_duration} daqiqa\n\n"
+            f"⏱ Davomiyligi: {planned_duration} daqiqa\n"
+            f"⏳ Qolgan vaqt: {planned_duration} daqiqa\n\n"
             f"📱 Telefon: Silent mode\n"
             f"🔕 Notificationlar: O'chirilgan\n"
             f"💻 Faqat vazifa: Fokus 100%\n\n"
             f"🚀 Boshlang! Men sizni nazorat qilaman!",
             parse_mode="Markdown"
         )
+        
+        # Xabarni PIN qilish
+        try:
+            await bot.pin_chat_message(
+                chat_id=user_id,
+                message_id=timer_message.message_id,
+                disable_notification=True  # Ovozli bildirishnoma yo'q
+            )
+            logger.info(f"📌 Timer message pinned for user {user_id}")
+        except Exception as pin_error:
+            logger.warning(f"⚠️ Could not pin message: {pin_error}")
+        
+        # Timer message ID ni saqlash (keyinchalik update qilish uchun)
+        active_pomodoro[user_id] = {
+            'timer_message_id': timer_message.message_id
+        }
+        
     except Exception as e:
         logger.error(f"Error sending Pomodoro start message: {e}")
     
@@ -503,19 +522,87 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
             send_pomodoro_check(bot, user_id, task_name, interval, session_id)
         )
     
+    # Timer xabarini har daqiqada yangilash task
+    timer_update_task = asyncio.create_task(
+        update_timer_message(bot, user_id, session_id, task_name, planned_duration, timer_message.message_id)
+    )
+    
     # Asosiy Pomodoro timer task
     pomodoro_task = asyncio.create_task(
         finish_pomodoro_session(bot, user_id, session_id, task_name, planned_duration)
     )
     
-    # Tracking
+    # Tracking - timer_message_id ni ham qo'shamiz
     active_pomodoro[user_id] = {
         'task': pomodoro_task,
+        'timer_update_task': timer_update_task,
         'session_id': session_id,
+        'timer_message_id': timer_message.message_id,
         'started_at': datetime.now(TASHKENT_TZ)
     }
     
     logger.info(f"✅ Pomodoro session fully initialized for user {user_id}")
+
+async def send_pomodoro_check(bot, user_id: int, task_name: str, after_minutes: int, session_id: int):
+    """
+    Pomodoro davomida tekshirish xabarlari - har 15 daqiqada
+    
+    OPTIMIZED VERSION
+    """
+    await asyncio.sleep(after_minutes * 60)  # Kutish
+    
+    logger.info(f"📊 Pomodoro check at {after_minutes}min for user {user_id}, session {session_id}")
+
+async def update_timer_message(bot, user_id: int, session_id: int, task_name: str, total_duration: int, message_id: int):
+    """
+    Timer xabarini har daqiqada yangilash - qolgan vaqtni ko'rsatish
+    
+    OPTIMIZED VERSION
+    """
+    try:
+        start_time = datetime.now(TASHKENT_TZ)
+        
+        for elapsed_minutes in range(1, total_duration + 1):
+            # 1 daqiqa kutish
+            await asyncio.sleep(60)
+            
+            # Session hali ham aktiv ekanligini tekshirish
+            if user_id not in active_pomodoro:
+                logger.info(f"⚠️ Timer update stopped - session ended for user {user_id}")
+                break
+            
+            remaining = total_duration - elapsed_minutes
+            
+            # Progress bar
+            progress = int((elapsed_minutes / total_duration) * 10)
+            progress_bar = "█" * progress + "░" * (10 - progress)
+            
+            # Xabarni yangilash
+            try:
+                await bot.edit_message_text(
+                    chat_id=user_id,
+                    message_id=message_id,
+                    text=(
+                        f"🍅 **POMODORO TIMER**\n\n"
+                        f"🎯 Vazifa: {task_name}\n"
+                        f"⏱ Umumiy: {total_duration} daqiqa\n"
+                        f"⏳ Qolgan: {remaining} daqiqa\n\n"
+                        f"📊 Progress: [{progress_bar}] {int((elapsed_minutes / total_duration) * 100)}%\n\n"
+                        f"💪 Fokusda qoling! Siz zo'rsiz!"
+                    ),
+                    parse_mode="Markdown"
+                )
+                logger.debug(f"⏱ Timer updated: {remaining} min remaining for user {user_id}")
+            except Exception as e:
+                logger.warning(f"Could not update timer message: {e}")
+        
+        logger.info(f"✅ Timer update completed for user {user_id}")
+        
+    except asyncio.CancelledError:
+        logger.info(f"🛑 Timer update cancelled for user {user_id}")
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error in timer update: {e}", exc_info=True)
 
 async def send_pomodoro_check(bot, user_id: int, task_name: str, after_minutes: int, session_id: int):
     """
@@ -611,13 +698,28 @@ async def finish_pomodoro_session(bot, user_id: int, session_id: int, task_name:
     except Exception as e:
         logger.error(f"Error ending focus session: {e}")
     
-    # Tracking tozalash
+    # Tracking tozalash va timer xabarini unpin qilish
+    timer_message_id = None
     if user_id in active_pomodoro:
+        timer_message_id = active_pomodoro[user_id].get('timer_message_id')
+        
+        # Timer update task'ni to'xtatish
+        if 'timer_update_task' in active_pomodoro[user_id]:
+            active_pomodoro[user_id]['timer_update_task'].cancel()
+        
         del active_pomodoro[user_id]
+    
+    # Timer xabarini unpin qilish
+    if timer_message_id:
+        try:
+            await bot.unpin_chat_message(chat_id=user_id, message_id=timer_message_id)
+            logger.info(f"📌 Timer message unpinned for user {user_id}")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not unpin message: {e}")
     
     try:
         # Tugallanganlik xabari
-        await bot.send_message(
+        completion_msg = await bot.send_message(
             user_id,
             f"🎉 **VAZIFA TUGADI!**{test_mode_indicator}\n\n"
             f"🎯 {task_name}\n"
@@ -638,16 +740,47 @@ async def finish_pomodoro_session(bot, user_id: int, session_id: int, task_name:
         # Tanaffus
         await asyncio.sleep(break_seconds)
         
-        # Tanaffus tugadi
-        await bot.send_message(
-            user_id,
-            f"⏰ **TANAFFUS TUGADI!**{test_mode_indicator}\n\n"
-            f"💪 Keyingi vazifaga tayyormisiz?\n\n"
-            f"📋 Jadvalingizga qarang!\n\n"
-            f"🚀 Davom etamiz!",
-            parse_mode="Markdown",
-            reply_markup=main_menu_keyboard()
-        )
+        # Keyingi vazifani olish
+        from utils.database import get_user_schedule_for_today
+        from datetime import datetime as dt
+        
+        today = dt.now(TASHKENT_TZ)
+        day_of_week = today.weekday()  # 0=Monday, 6=Sunday
+        
+        schedule = await get_user_schedule_for_today(user_id, day_of_week)
+        
+        # Hozirgi vaqtdan keyingi vazifani topish
+        current_time = today.strftime("%H:%M")
+        next_task = None
+        
+        for task in schedule:
+            if task['start_time'] > current_time:
+                next_task = task
+                break
+        
+        # Tanaffus tugadi xabari
+        if next_task:
+            await bot.send_message(
+                user_id,
+                f"⏰ **TANAFFUS TUGADI!**{test_mode_indicator}\n\n"
+                f"💪 Keyingi vazifa:\n\n"
+                f"🎯 {next_task['task_name']}\n"
+                f"🕐 {next_task['start_time']} - {next_task['end_time']}\n"
+                f"📂 {next_task['category']}\n\n"
+                f"🚀 Tayyor bo'lsangiz, bildirishnomani kuting!",
+                parse_mode="Markdown",
+                reply_markup=main_menu_keyboard()
+            )
+        else:
+            await bot.send_message(
+                user_id,
+                f"⏰ **TANAFFUS TUGADI!**{test_mode_indicator}\n\n"
+                f"✅ Bugungi barcha vazifalar tugallandi!\n\n"
+                f"🎉 Ajoyib kun bo'ldi!\n\n"
+                f"📊 Statistikangizni ko'ring: '📊 Statistika'",
+                parse_mode="Markdown",
+                reply_markup=main_menu_keyboard()
+            )
         
         logger.info(f"✅ Break finished message sent to user {user_id}")
         
