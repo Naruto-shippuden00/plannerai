@@ -308,6 +308,9 @@ async def toggle_test_mode(message: Message):
         await message.answer("❌ Bu komanda faqat admin uchun!")
         return
     
+    from zoneinfo import ZoneInfo
+    TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
+    
     user_id = message.from_user.id
     
     # Test mode holatini aniqlash
@@ -329,7 +332,7 @@ async def toggle_test_mode(message: Message):
         # Test mode'ni yoqish
         test_mode_users[user_id] = {
             'enabled': True,
-            'started_at': datetime.now()
+            'started_at': datetime.now(TASHKENT_TZ)
         }
         
         await message.answer(
@@ -413,17 +416,26 @@ async def test_mode_status(message: Message):
         await message.answer("❌ Bu komanda faqat admin uchun!")
         return
     
+    from zoneinfo import ZoneInfo
+    TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
+    
     user_id = message.from_user.id
     
     if is_test_mode(user_id):
         started = test_mode_users[user_id]['started_at']
-        duration = datetime.now() - started
+        # Agar started timezone-aware bo'lmasa, Tashkent timezone qo'shamiz
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=TASHKENT_TZ)
+        
+        current_time = datetime.now(TASHKENT_TZ)
+        duration = current_time - started
         hours = int(duration.total_seconds() // 3600)
         minutes = int((duration.total_seconds() % 3600) // 60)
         
         await message.answer(
             f"🟢 **TEST REJIMI YOQILGAN**\n\n"
-            f"📅 Boshlangan: {started.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"📅 Boshlangan: {started.strftime('%Y-%m-%d %H:%M:%S')} (Toshkent)\n"
+            f"🕐 Hozirgi vaqt: {current_time.strftime('%H:%M:%S')}\n"
             f"⏱ Davomiyligi: {hours}s {minutes}d\n\n"
             f"⚙️ **Sozlamalar:**\n"
             f"• Bildirishnoma: 30 soniya\n"
