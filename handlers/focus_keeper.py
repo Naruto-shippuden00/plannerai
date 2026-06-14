@@ -358,6 +358,9 @@ async def handle_any_photo(message: Message, state: FSMContext):
         
         # AI TAHLIL QILISH VA TASDIQLASH
         logger.info(f"🤖 AI analysis step starting...")
+        ai_success = False
+        analysis_result = None
+        
         try:
             from utils.ai_helper import analyze_task_photo
             from utils.translations import get_text
@@ -367,12 +370,27 @@ async def handle_any_photo(message: Message, state: FSMContext):
                 parse_mode="Markdown"
             )
             
-            logger.info(f"🤖 Calling AI analysis...")
-            analysis_result = await analyze_task_photo(photo_path, task_id, user_id, user_language)
-            logger.info(f"✅ AI analysis completed: is_valid={analysis_result.get('is_valid')}, confidence={analysis_result.get('confidence'):.2f}")
+            logger.info(f"🤖 Calling AI analysis with: photo={photo_path}, task_id={task_id}, user_id={user_id}, lang={user_language}")
+            
+            # AI analysis with timeout
+            import asyncio
+            try:
+                analysis_result = await asyncio.wait_for(
+                    analyze_task_photo(photo_path, task_id, user_id, user_language),
+                    timeout=15.0  # 15 soniya timeout
+                )
+                ai_success = True
+                logger.info(f"✅ AI analysis completed: is_valid={analysis_result.get('is_valid')}, confidence={analysis_result.get('confidence', 0):.2f}")
+            except asyncio.TimeoutError:
+                logger.error(f"⏱️ AI analysis TIMEOUT after 15s")
+                analysis_result = {
+                    "is_valid": True,
+                    "message": get_text("ai_technical_error", user_language),
+                    "confidence": 0.5
+                }
             
             # Rasm tasdiqlanmasa, bildirishnomalarni qayta boshlash
-            if not analysis_result.get("is_valid", True):
+            if ai_success and not analysis_result.get("is_valid", True):
                 logger.warning(f"❌ Photo rejected by AI for user {user_id}")
                 
                 await message.answer(
@@ -384,7 +402,6 @@ async def handle_any_photo(message: Message, state: FSMContext):
                 
                 # Rasmni o'chirish (disk joy tejash)
                 try:
-                    import os
                     if os.path.exists(photo_path):
                         os.remove(photo_path)
                         logger.info(f"🗑 Rejected photo deleted: {photo_path}")
@@ -405,22 +422,26 @@ async def handle_any_photo(message: Message, state: FSMContext):
                 
                 return  # Keyingi kodlarni bajarmaslik
             
-            # Rasm qabul qilindi
-            logger.info(f"✅ Photo accepted by AI")
-            
-            await message.answer(
-                f"{get_text('ai_result_title', user_language)}\n\n"
-                f"{analysis_result['message']}\n\n"
-                f"{get_text('ai_analysis_complete', user_language)}",
-                parse_mode="Markdown"
-            )
-            
+            # Rasm qabul qilindi - xabar yuborish
+            if ai_success and analysis_result:
+                logger.info(f"✅ Photo accepted by AI")
+                
+                await message.answer(
+                    f"{get_text('ai_result_title', user_language)}\n\n"
+                    f"{analysis_result['message']}\n\n"
+                    f"{get_text('ai_analysis_complete', user_language)}",
+                    parse_mode="Markdown"
+                )
+            else:
+                # AI ishlamasa, oddiy xabar
+                logger.info(f"⚠️ AI analysis skipped or failed, accepting photo by default")
+                
+        except ImportError as ie:
+            logger.error(f"❌ AI analysis import failed: {ie}")
         except Exception as e:
             logger.error(f"❌ AI analysis failed: {e}", exc_info=True)
-            await message.answer(
-                get_text("ai_technical_error", user_language),
-                parse_mode="Markdown"
-            )
+            # Xatolik bo'lsa ham davom etamiz
+            pass
         
         logger.info(f"📨 Sending confirmation message...")
         

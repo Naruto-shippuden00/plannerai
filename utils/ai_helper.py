@@ -120,7 +120,12 @@ async def analyze_task_photo(photo_path: str, task_id: int, user_id: int, langua
         
         caption = ""
         try:
-            response = requests.post(API_URL_CAPTION, headers=headers, data=image_data, timeout=30)
+            import asyncio
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None, 
+                lambda: requests.post(API_URL_CAPTION, headers=headers, data=image_data, timeout=30)
+            )
             
             if response.status_code == 200:
                 result = response.json()
@@ -133,7 +138,7 @@ async def analyze_task_photo(photo_path: str, task_id: int, user_id: int, langua
                 
                 logger.info(f"✅ Image caption: {caption}")
             else:
-                logger.warning(f"⚠️ Captioning failed: {response.status_code}")
+                logger.warning(f"⚠️ Captioning failed: {response.status_code}, response: {response.text[:200]}")
                 # Captioning ishlamasa, rasmni qabul qilamiz
                 return {
                     "is_valid": True,
@@ -141,7 +146,7 @@ async def analyze_task_photo(photo_path: str, task_id: int, user_id: int, langua
                     "confidence": 0.6
                 }
         except Exception as e:
-            logger.error(f"❌ Captioning error: {e}")
+            logger.error(f"❌ Captioning error: {e}", exc_info=True)
             return {
                 "is_valid": True,
                 "message": get_text("ai_technical_error", language),
