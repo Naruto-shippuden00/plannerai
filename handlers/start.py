@@ -23,18 +23,12 @@ class UserState(StatesGroup):
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
-    """Start komandasi - Til tanlash"""
+    """Start komandasi - Har doim til tanlashni ko'rsatish"""
     user = message.from_user
     await add_user(user.id, user.username or "", user.full_name or "")
     
-    # Foydalanuvchi tilini tekshirish
-    user_lang = await get_user_language(user.id)
-    
-    # Agar til tanlanmagan bo'lsa, til tanlashni so'rash
-    if not user_lang or user_lang == 'uz':  # Default uz bo'lgani uchun qayta so'raymiz
-        await show_language_selection(message)
-    else:
-        await show_welcome_message(message, user_lang)
+    # Har doim til tanlashni ko'rsatish (yangi yoki mavjud foydalanuvchi)
+    await show_language_selection(message)
 
 async def show_language_selection(message: Message):
     """Til tanlash menyusini ko'rsatish"""
@@ -67,9 +61,25 @@ async def select_language(callback: CallbackQuery):
     # Tilni saqlash
     await set_user_language(user_id, language)
     
-    # Welcome xabarini ko'rsatish
+    # Eski xabarni o'chirish
     await callback.message.delete()
     
+    # Til o'zgartirilganini ko'rsatish
+    lang_names = {
+        "uz": "O'zbek",
+        "ru": "Русский", 
+        "en": "English"
+    }
+    
+    change_texts = {
+        "uz": f"✅ Til o'zgartirildi: {lang_names.get(language, 'O\'zbek')}",
+        "ru": f"✅ Язык изменён: {lang_names.get(language, 'Русский')}",
+        "en": f"✅ Language changed: {lang_names.get(language, 'English')}"
+    }
+    
+    await callback.answer(change_texts.get(language, change_texts["uz"]), show_alert=True)
+    
+    # Welcome xabarini ko'rsatish
     welcome_text = get_text("welcome", language, name=callback.from_user.first_name)
     
     await callback.message.answer(
@@ -77,8 +87,6 @@ async def select_language(callback: CallbackQuery):
         reply_markup=main_menu_keyboard(language),
         parse_mode="Markdown"
     )
-    
-    await callback.answer(get_text("language_changed", language))
 
 @router.message(Command("language"))
 async def cmd_language(message: Message):
