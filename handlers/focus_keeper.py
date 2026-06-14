@@ -513,27 +513,31 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
         logger.info(f"📤 Sending timer message...")
         
         # Countdown format
-        hours = planned_duration // 60
-        minutes = planned_duration % 60
-        if hours > 0:
-            countdown = f"{hours:02d}:{minutes:02d}"
+        if planned_duration >= 60:
+            hours = planned_duration // 60
+            minutes = planned_duration % 60
+            countdown = f"{hours}:{minutes:02d}"
         else:
-            countdown = f"{minutes:02d}:00"
+            countdown = f"{planned_duration}:00"
         
-        # Timer xabari
+        # Boshlang'ich doira - hamma bo'sh
+        block_progress = "▱" * 12
+        
+        # Timer xabari - Google Timer kabi
         timer_message = await bot.send_message(
             user_id,
-            f"🍅 **POMODORO TIMER BOSHLANDI!**{test_mode_indicator}\n\n"
-            f"🎯 Vazifa: **{task_name}**\n\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"⏱ **QOLGAN VAQT: {countdown}**\n"
-            f"━━━━━━━━━━━━━━━\n\n"
-            f"📊 Progress: [░░░░░░░░░░] 0%\n"
-            f"⏱ O'tgan: 0 min / {planned_duration} min\n\n"
-            f"📱 Telefon: Silent mode\n"
-            f"🔕 Notificationlar: O'chirilgan\n"
-            f"💻 Faqat vazifa: Fokus 100%\n\n"
-            f"🚀 Boshlang! Men sizni nazorat qilaman!",
+            f"🍅 **FOCUS TIMER**{test_mode_indicator}\n\n"
+            f"🎯 {task_name}\n\n"
+            f"┌─────────────────┐\n"
+            f"│                           │\n"
+            f"│      🟢  **{countdown}**  🟢      │\n"
+            f"│                           │\n"
+            f"│   {block_progress}   │\n"
+            f"│                           │\n"
+            f"└─────────────────┘\n\n"
+            f"📊 0% | 0/{planned_duration} min\n\n"
+            f"✨ Fokusda qoling!\n\n"
+            f"📱 Telefon: Silent | 🔕 Notifications: Off",
             parse_mode="Markdown"
         )
         logger.info(f"✅ Timer message sent successfully! Message ID: {timer_message.message_id}")
@@ -612,9 +616,9 @@ async def send_pomodoro_check(bot, user_id: int, task_name: str, after_minutes: 
 
 async def update_timer_message(bot, user_id: int, session_id: int, task_name: str, total_duration: int, message_id: int):
     """
-    Timer xabarini har daqiqada yangilash - TESKARI SANOQ
+    Timer xabarini har daqiqada yangilash - DOIRA SHAKLIDAGI TESKARI SANOQ
     
-    60:00 → 59:00 → 58:00 → ... → 01:00 → 00:00
+    Google Timer kabi: ⭕️ doira shakli bilan
     """
     try:
         start_time = datetime.now(TASHKENT_TZ)
@@ -634,44 +638,64 @@ async def update_timer_message(bot, user_id: int, session_id: int, task_name: st
             hours = remaining_minutes // 60
             minutes = remaining_minutes % 60
             
-            # Countdown format: 01:30 yoki 00:45
-            if hours > 0:
-                countdown = f"{hours:02d}:{minutes:02d}"
+            # Countdown format: 1:30 yoki 0:45 yoki 45:00
+            if total_duration >= 60:
+                # Agar 1 soat yoki ko'proq bo'lsa: 1:30 format
+                countdown = f"{hours}:{minutes:02d}"
             else:
-                countdown = f"{minutes:02d}:00"
+                # Agar 1 soatdan kam bo'lsa: 45:00 format
+                countdown = f"{remaining_minutes}:00"
             
-            # Progress bar (10 belgili)
+            # Progress foizi (0-100)
             progress_percent = int((elapsed_minutes / total_duration) * 100)
-            progress = int((elapsed_minutes / total_duration) * 10)
-            progress_bar = "█" * progress + "░" * (10 - progress)
             
-            # Vaqt qolganiga qarab emoji va xabar
+            # Doira progress (12 qism - soat yuzasi kabi)
+            segments = 12
+            filled = int((elapsed_minutes / total_duration) * segments)
+            empty = segments - filled
+            
+            # Doira progress bar - Google timer kabi
+            # ● ○ belgilaridan foydalanish
+            circle_progress = "●" * filled + "○" * empty
+            
+            # Yoki boshqa variant - bloklar bilan
+            # ▰ ▱ yoki ▓ ░
+            block_progress = "▰" * filled + "▱" * empty
+            
+            # Vaqt qolganiga qarab emoji va rang
             if remaining_minutes <= 5:
-                time_emoji = "🔥"
-                motivation = "Oxirgi daqiqalar! Zo'r ish qilmoqdasiz! 🔥"
+                time_emoji = "🔴"  # Qizil - oxirgi daqiqalar
+                circle_color = "🔴"
+                motivation = "🔥 OXIRGI DAQIQALAR! 🔥"
             elif remaining_minutes <= 15:
-                time_emoji = "⚡️"
-                motivation = "Yaxshi! Yana bir oz! 💪"
+                time_emoji = "🟠"  # To'q sariq
+                circle_color = "🟠"
+                motivation = "⚡️ Yaxshi! Yana bir oz!"
             elif remaining_minutes <= 30:
-                time_emoji = "💪"
-                motivation = "Ajoyib! Davom eting! ⚡️"
+                time_emoji = "🟡"  # Sariq
+                circle_color = "🟡"
+                motivation = "💪 Ajoyib! Davom eting!"
             else:
-                time_emoji = "⏱"
-                motivation = "Fokusda qoling! Siz zo'rsiz! 💪"
+                time_emoji = "🟢"  # Yashil
+                circle_color = "🟢"
+                motivation = "✨ Fokusda qoling!"
             
-            # Xabarni yangilash
+            # Xabarni yangilash - Google Timer dizayni
             try:
                 await bot.edit_message_text(
                     chat_id=user_id,
                     message_id=message_id,
                     text=(
-                        f"🍅 **POMODORO TIMER**\n\n"
-                        f"🎯 Vazifa: **{task_name}**\n\n"
-                        f"━━━━━━━━━━━━━━━\n"
-                        f"{time_emoji} **QOLGAN VAQT: {countdown}**\n"
-                        f"━━━━━━━━━━━━━━━\n\n"
-                        f"📊 Progress: [{progress_bar}] {progress_percent}%\n"
-                        f"⏱ O'tgan: {elapsed_minutes} min / {total_duration} min\n\n"
+                        f"🍅 **FOCUS TIMER**\n\n"
+                        f"🎯 {task_name}\n\n"
+                        f"┌─────────────────┐\n"
+                        f"│                           │\n"
+                        f"│      {circle_color}  **{countdown}**  {circle_color}      │\n"
+                        f"│                           │\n"
+                        f"│   {block_progress}   │\n"
+                        f"│                           │\n"
+                        f"└─────────────────┘\n\n"
+                        f"📊 {progress_percent}% | {elapsed_minutes}/{total_duration} min\n\n"
                         f"{motivation}"
                     ),
                     parse_mode="Markdown"
