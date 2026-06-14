@@ -4,6 +4,7 @@ Admin panel - Faqat admin foydalana oladi
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
 from datetime import datetime, timedelta
 import os
 import asyncio
@@ -181,14 +182,14 @@ Aktiv bildirishnomalar: {len(active_notifications)} ta
     await message.answer(text, parse_mode="Markdown")
 
 @router.message(Command("test_reminder"))
-async def test_reminder_command(message: Message):
+async def test_reminder_command(message: Message, state: FSMContext):
     """TEST - Hozir bildirishnoma yuborish"""
     if not is_admin(message.from_user.id):
         await message.answer("❌ Bu komanda faqat admin uchun!")
         return
     
-    from utils.scheduler import send_task_reminder
-    from utils.database import get_user_tasks
+    from utils.database import get_user_tasks, create_focus_session
+    from handlers.focus_keeper import start_continuous_notifications, FocusState
     
     user_id = message.from_user.id
     
@@ -200,33 +201,100 @@ async def test_reminder_command(message: Message):
         return
     
     task = tasks[0]
+    task_id = task['id']
+    task_name = task['task_name']
+    duration_minutes = task.get('duration_minutes', 60)
+    
+    # Test mode uchun duration
+    if is_test_mode(user_id):
+        duration_minutes = get_pomodoro_duration(user_id, duration_minutes)
     
     await message.answer(
         f"🧪 **TEST REJIMI**\n\n"
         f"Hozir sizga test bildirishnoma yuboriladi:\n\n"
-        f"🎯 Vazifa: {task['task_name']}\n"
-        f"📂 Kategoriya: {task['category']}\n\n"
-        f"⏱ 3 soniyadan keyin...",
+        f"🎯 Vazifa: {task_name}\n"
+        f"📂 Kategoriya: {task['category']}\n"
+        f"⏱ Duration: {duration_minutes} daqiqa\n\n"
+        f"⏳ 2 soniyadan keyin...",
         parse_mode="Markdown"
     )
     
-    await asyncio.sleep(3)
+    await asyncio.sleep(2)
     
-    # Test reminder yuborish
-    bot = message.bot
-    await send_task_reminder(
-        bot=bot,
-        user_id=user_id,
-        task_id=task['id'],
-        task_name=task['task_name'],
-        start_time=f"{datetime.now().strftime('%H:%M')}-{(datetime.now() + timedelta(hours=1)).strftime('%H:%M')}"
-    )
-    
-    await message.answer(
-        "✅ Test bildirishnoma yuborildi!\n\n"
-        "Endi rasm yuboring va tizim qanday ishlashini ko'ring! 📸",
-        parse_mode="Markdown"
-    )
+    # Focus session yaratish
+    try:
+        session_id = await create_focus_session(
+            user_id=user_id,
+            task_id=task_id,
+            schedule_id=0,  # Test uchun
+            planned_duration=duration_minutes
+        )
+        
+        # FSM state o'rnatish - TO'G'RI USUL
+        await state.set_state(FocusState.waiting_for_photo)
+        await state.update_data(
+            session_id=session_id,
+            task_id=task_id,
+            task_name=task_name,
+            start_time=datetime.now().strftime('%H:%M'),
+            end_time=(datetime.now() + timedelta(minutes=duration_minutes)).strftime('%H:%M')
+        )
+        
+        # Test reminder xabari
+        start_time = datetime.now().strftime('%H:%M')
+        end_time = (datetime.now() + timedelta(minutes=duration_minutes)).strftime('%H:%M')
+        
+        message_text = (
+            f"⏰ **VAZIFA VAQTI KELDI!** [TEST]\n\n"
+            f"🎯 **{task_name}**\n"
+            f"📂 Kategoriya: {task.get('category', 'N/A')}\n"
+            f"🕐 Boshlanish: {start_time}\n"
+            f"⏰ Tugash: {end_time}\n"
+            f"⏱ Davomiyligi: {duration_minutes} daqiqa\n\n"
+            f"🔔 **CHEKSIZ BILDIRISHNOMALAR BOSHLANDI!**\n\n"
+            f"❗️ {'HAR 30 SONIYADA' if is_test_mode(user_id) else 'HAR 5 DAQIQADA'} ESLATMA YUBORILADI!\n\n"
+            f"🛑 **TO'XTATISH UCHUN:**\n"
+            f"📸 Vazifani bajarayotganingizni tasdiqlovchi RASM yuboring!\n\n"
+            f"**Rasm misollari:**\n"
+            f"• Dars jarayoni (SAT, IELTS)\n"
+            f"• Kod yozayotgan ekran (Python)\n"
+            f"• Mashq daftari (Study)\n"
+            f"• O'qiyotgan kitob sahifasi\n\n"
+            f"⚠️ Rasm yubormasangiz, bildirishnomalar DAVOM ETADI!\n\n"
+            f"💪 Fokusga kiring va muvaffaqiyatga erishing!"
+        )
+        
+        await message.answer(message_text, parse_mode="Markdown")
+        
+        # Cheksiz bildirishnomalarni boshlash
+        await start_continuous_notifications(
+            bot=message.bot,
+            user_id=user_id,
+            session_id=session_id,
+            task_name=task_name,
+            start_time=start_time,
+            end_time=end_time
+        )
+        
+        await message.answer(
+            "✅ Test bildirishnoma yuborildi va bildirishnomalar boshlandi!\n\n"
+            "📸 Endi rasm yuboring va tizimni kuzating:\n"
+            "1️⃣ Bildirishnomalar to'xtashi\n"
+            "2️⃣ AI tahlil qilishi\n"
+            "3️⃣ Pomodoro timer boshlanishi\n\n"
+            "⏰ Kutish vaqti:\n"
+            f"• Bildirishnoma: {'30 soniya' if is_test_mode(user_id) else '5 daqiqa'}\n"
+            f"• Timer: {duration_minutes} daqiqa\n"
+            f"• Tanaffus: {'30 soniya' if is_test_mode(user_id) else '10 daqiqa'}",
+            parse_mode="Markdown"
+        )
+        
+    except Exception as e:
+        await message.answer(
+            f"❌ Xatolik: {e}\n\n"
+            f"Iltimos, qayta urinib ko'ring.",
+            parse_mode="Markdown"
+        )
 
 # ============== TEST MODE SYSTEM ==============
 
@@ -239,6 +307,9 @@ async def toggle_test_mode(message: Message):
     if not is_admin(message.from_user.id):
         await message.answer("❌ Bu komanda faqat admin uchun!")
         return
+    
+    from zoneinfo import ZoneInfo
+    TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
     
     user_id = message.from_user.id
     
@@ -261,7 +332,7 @@ async def toggle_test_mode(message: Message):
         # Test mode'ni yoqish
         test_mode_users[user_id] = {
             'enabled': True,
-            'started_at': datetime.now()
+            'started_at': datetime.now(TASHKENT_TZ)
         }
         
         await message.answer(
@@ -345,17 +416,26 @@ async def test_mode_status(message: Message):
         await message.answer("❌ Bu komanda faqat admin uchun!")
         return
     
+    from zoneinfo import ZoneInfo
+    TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
+    
     user_id = message.from_user.id
     
     if is_test_mode(user_id):
         started = test_mode_users[user_id]['started_at']
-        duration = datetime.now() - started
+        # Agar started timezone-aware bo'lmasa, Tashkent timezone qo'shamiz
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=TASHKENT_TZ)
+        
+        current_time = datetime.now(TASHKENT_TZ)
+        duration = current_time - started
         hours = int(duration.total_seconds() // 3600)
         minutes = int((duration.total_seconds() % 3600) // 60)
         
         await message.answer(
             f"🟢 **TEST REJIMI YOQILGAN**\n\n"
-            f"📅 Boshlangan: {started.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"📅 Boshlangan: {started.strftime('%Y-%m-%d %H:%M:%S')} (Toshkent)\n"
+            f"🕐 Hozirgi vaqt: {current_time.strftime('%H:%M:%S')}\n"
             f"⏱ Davomiyligi: {hours}s {minutes}d\n\n"
             f"⚙️ **Sozlamalar:**\n"
             f"• Bildirishnoma: 30 soniya\n"

@@ -1025,3 +1025,92 @@ async def get_task_by_id(task_id: int, user_id: int) -> Optional[Dict]:
             if row:
                 return dict(row)
             return None
+
+
+
+# ============== NOTIFICATION SETTINGS ==============
+
+async def get_notification_settings(user_id: int) -> Dict:
+    """Foydalanuvchi bildirishnoma sozlamalarini olish"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            SELECT task_reminders, morning_motivation, weekly_reports
+            FROM users
+            WHERE user_id = ?
+        """, (user_id,))
+        
+        row = await cursor.fetchone()
+        if row:
+            return {
+                'task_reminders': bool(row[0]) if row[0] is not None else True,
+                'morning_motivation': bool(row[1]) if row[1] is not None else True,
+                'weekly_reports': bool(row[2]) if row[2] is not None else True
+            }
+        return {
+            'task_reminders': True,
+            'morning_motivation': True,
+            'weekly_reports': True
+        }
+
+async def update_notification_settings(user_id: int, settings: Dict):
+    """Bildirishnoma sozlamalarini yangilash"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Agar ustunlar mavjud bo'lmasa, qo'shamiz
+        try:
+            await db.execute("""
+                ALTER TABLE users ADD COLUMN task_reminders INTEGER DEFAULT 1
+            """)
+        except:
+            pass
+        
+        try:
+            await db.execute("""
+                ALTER TABLE users ADD COLUMN morning_motivation INTEGER DEFAULT 1
+            """)
+        except:
+            pass
+        
+        try:
+            await db.execute("""
+                ALTER TABLE users ADD COLUMN weekly_reports INTEGER DEFAULT 1
+            """)
+        except:
+            pass
+        
+        await db.execute("""
+            UPDATE users
+            SET task_reminders = ?,
+                morning_motivation = ?,
+                weekly_reports = ?
+            WHERE user_id = ?
+        """, (
+            int(settings.get('task_reminders', True)),
+            int(settings.get('morning_motivation', True)),
+            int(settings.get('weekly_reports', True)),
+            user_id
+        ))
+        
+        await db.commit()
+        logger.info(f"✅ Notification settings updated for user {user_id}")
+
+# ============== TIMEZONE SETTINGS ==============
+
+async def update_user_timezone(user_id: int, timezone: str):
+    """Foydalanuvchi vaqt mintaqasini yangilash"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Agar ustun mavjud bo'lmasa, qo'shamiz
+        try:
+            await db.execute("""
+                ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT 'Asia/Tashkent'
+            """)
+        except:
+            pass
+        
+        await db.execute("""
+            UPDATE users
+            SET timezone = ?
+            WHERE user_id = ?
+        """, (timezone, user_id))
+        
+        await db.commit()
+        logger.info(f"✅ Timezone updated to {timezone} for user {user_id}")
