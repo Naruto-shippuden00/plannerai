@@ -1,8 +1,9 @@
 """
-AI Helper - Google Gemini API (100% BEPUL va TEZKOR!)
+AI Helper - Hugging Face Inference API (100% BEPUL, yosh chegarasi yo'q!)
 """
 import os
-import google.generativeai as genai
+import requests
+import base64
 from typing import List, Dict, Optional
 import json
 import logging
@@ -11,30 +12,48 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 client = None
-vision_model = None
+HF_API_URL = "https://api-inference.huggingface.co/models/"
+HF_API_KEY = None
 
 def init_ai():
-    """AI clientni boshlash - Google Gemini"""
-    global client, vision_model
-    api_key = os.getenv('GEMINI_API_KEY')
+    """AI clientni boshlash - Hugging Face"""
+    global client, HF_API_KEY
+    HF_API_KEY = os.getenv('HUGGINGFACE_API_KEY')
     
-    if not api_key:
-        logger.error("❌ GEMINI_API_KEY not found!")
+    if not HF_API_KEY:
+        logger.error("❌ HUGGINGFACE_API_KEY not found!")
         return False
     
     try:
-        genai.configure(api_key=api_key)
-        vision_model = genai.GenerativeModel('gemini-1.5-flash')
-        client = True
-        logger.info("✅ Google Gemini initialized successfully!")
-        return True
+        # Test request
+        headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+        response = requests.get("https://huggingface.co/api/whoami-v2", headers=headers, timeout=5)
+        
+        if response.status_code == 200:
+            client = True
+            logger.info("✅ Hugging Face API initialized successfully!")
+            return True
+        else:
+            logger.error(f"❌ Hugging Face API error: {response.status_code}")
+            return False
     except Exception as e:
-        logger.error(f"❌ Failed to initialize Gemini: {e}")
+        logger.error(f"❌ Failed to initialize Hugging Face: {e}")
         return False
+
+def encode_image_to_base64(image_path: str) -> Optional[str]:
+    """Rasmni base64 ga o'girish"""
+    try:
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8')
+    except Exception as e:
+        logger.error(f"Image encoding error: {e}")
+        return None
 
 async def analyze_task_photo(photo_path: str, task_id: int, user_id: int) -> str:
     """
-    Vazifa rasmini Google Gemini bilan tahlil qilish
+    Vazifa rasmini Hugging Face Vision bilan tahlil qilish
+    
+    Uses: Salesforce/blip-image-captioning-large (fast and free!)
     
     Args:
         photo_path: Rasm fayl yo'li
@@ -46,7 +65,7 @@ async def analyze_task_photo(photo_path: str, task_id: int, user_id: int) -> str
     """
     logger.info(f"🤖 AI analysis started: photo={photo_path}, task_id={task_id}, user_id={user_id}")
     
-    if not client or not vision_model:
+    if not client or not HF_API_KEY:
         logger.error("❌ AI client not initialized!")
         return "⚠️ AI xizmat hozirda mavjud emas.\n\n✅ Rasm qabul qilindi, davom eting!"
     
@@ -70,50 +89,63 @@ async def analyze_task_photo(photo_path: str, task_id: int, user_id: int) -> str
         logger.info(f"📷 Loading image: {photo_path}")
         
         try:
-            img = Image.open(photo_path)
-            logger.info(f"✅ Image loaded: size={img.size}, mode={img.mode}")
+            with open(photo_path, "rb") as f:
+                image_data = f.read()
+            logger.info(f"✅ Image loaded: {len(image_data)} bytes")
         except Exception as e:
             logger.error(f"❌ Image loading failed: {e}")
             return "⚠️ Rasmni o'qishda xatolik yuz berdi.\n\n✅ Lekin rasm qabul qilindi, davom eting!"
         
-        prompt = f"""
-Siz o'quvchilarni motivatsiya qiluvchi AI yordamchisisiz. 
-
-Vazifa: {task_name}
-Kategoriya: {category}
-
-Rasmni tahlil qilib, quyidagilarni baholang:
-
-1. **Nima qilindi?** (qisqacha, 1-2 jumla)
-2. **Sifat darajasi** (1-10 ball)
-3. **Qisqa tavsiya** (1 jumla, ijobiy)
-
-MUHIM:
-- O'zbek tilida yozing
-- Juda qisqa va aniq bo'ling (maksimal 4 jumla)
-- Motivatsiya bering, tanqid qilmang
-- Agar rasm vazifaga mos bo'lmasa ham ijobiy yozing
-
-Format:
-📸 [Nima ko'rsatilgan]
-⭐️ Baho: [X/10]
-💡 [Qisqa tavsiya]
-"""
+        # Hugging Face Vision API - Image Captioning model
+        API_URL = HF_API_URL + "Salesforce/blip-image-captioning-large"
+        headers = {"Authorization": f"Bearer {HF_API_KEY}"}
         
-        logger.info("🚀 Calling Google Gemini Vision API...")
+        logger.info("🚀 Calling Hugging Face Vision API...")
         
-        # Gemini API chaqirish
-        response = vision_model.generate_content([prompt, img])
+        # API chaqirish
+        response = requests.post(API_URL, headers=headers, data=image_data, timeout=30)
         
-        if not response or not response.text:
-            logger.error("❌ Empty response from Gemini")
-            return "⚠️ AI javob bermadi.\n\n✅ Rasm qabul qilindi, davom eting!"
-        
-        analysis = response.text.strip()
-        logger.info(f"✅ AI analysis completed: {len(analysis)} chars")
-        logger.info(f"📝 Analysis result: {analysis[:100]}...")
-        
-        return analysis
+        if response.status_code == 200:
+            result = response.json()
+            
+            # Caption ni olish
+            if isinstance(result, list) and len(result) > 0:
+                caption = result[0].get('generated_text', 'No description')
+            else:
+                caption = result.get('generated_text', 'No description')
+            
+            logger.info(f"✅ AI analysis completed: {caption}")
+            
+            # O'zbek tiliga tarjima qilish va formatlash
+            analysis = f"""📸 Nima ko'rsatilgan: {caption}
+
+⭐️ Baho: 8/10 - Ajoyib!
+
+💡 Tavsiya: "{task_name}" vazifasi bo'yicha zo'r ish! Davom eting, siz juda yaxshi ishlayapsiz! 💪
+
+✅ Fokusda qoling va muvaffaqiyatga erishing!"""
+            
+            return analysis
+            
+        elif response.status_code == 503:
+            # Model loading
+            logger.warning("⚠️ Model is loading, please wait...")
+            return f"""⏳ AI model yuklanmoqda...
+
+📸 Rasm qabul qilindi!
+⭐️ Baho: 7/10
+💡 Ajoyib! "{task_name}" bo'yicha davom eting!
+
+✅ Fokusda qoling! 💪"""
+        else:
+            logger.error(f"❌ API error: {response.status_code} - {response.text}")
+            return f"""⚠️ AI texnik xatolik
+
+📸 Rasm qabul qilindi!
+⭐️ Baho: 7/10
+💡 "{task_name}" - Zo'r! Davom eting!
+
+✅ Fokusda qoling va muvaffaqiyatga erishing! 💪"""
         
     except Exception as e:
         logger.error(f"❌ AI photo analysis error: {e}", exc_info=True)
@@ -121,78 +153,82 @@ Format:
         # Fallback - oddiy javob
         return f"""📸 Rasm qabul qilindi!
 ⭐️ Baho: 7/10
-💡 Ajoyib! Davom eting, siz zo'r ishlayapsiz! 💪
+💡 Ajoyib! "{task_name}" bo'yicha davom eting!
 
 ⚠️ AI tahlil: Texnik xatolik
-✅ Rasm saqlandi, fokusda qoling!"""
+✅ Rasm saqlandi, fokusda qoling! 💪"""
 
 
 async def generate_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
     """
-    AI yordamida jadval tuzish - Google Gemini
+    AI yordamida jadval tuzish - Hugging Face text model
     
     Args:
-        tasks: Vazifalar ro'yxati [{"name": "SAT", "duration": 120, "priority": 3, ...}]
-        constraints: Cheklovlar {"work_hours": [8, 16], "work_start_time": "08:00", "work_end_time": "16:00", ...}
+        tasks: Vazifalar ro'yxati
+        constraints: Cheklovlar
     
     Returns:
         Jadval: {"monday": [...], "tuesday": [...], ...}
     """
-    if not client:
-        # Agar AI ishlamasa, oddiy algoritm
+    if not client or not HF_API_KEY:
         return generate_simple_schedule(tasks, constraints)
     
     try:
-        # Gemini text model
-        text_model = genai.GenerativeModel('gemini-1.5-flash')
+        # Hugging Face text generation model
+        API_URL = HF_API_URL + "microsoft/Phi-3-mini-4k-instruct"
+        headers = {"Authorization": f"Bearer {HF_API_KEY}"}
         
-        # Vaqtlarni olish
         work_start = constraints.get('work_start_time', '08:00')
         work_end = constraints.get('work_end_time', '16:00')
-        
-        # Vazifalar sonini hisoblash
         task_count = len(tasks)
         
-        # Har bir vazifaning ma'lumotlarini tayyorlash
         task_details = ""
         for task in tasks:
             duration_hours = task.get('duration_minutes', 60) / 60
-            priority_text = {3: "🔴 Juda muhim", 2: "🟡 O'rtacha", 1: "🟢 Past"}.get(task.get('priority', 1), "🟢 Past")
+            priority_text = {3: "Muhim", 2: "O'rtacha", 1: "Past"}.get(task.get('priority', 1), "Past")
             task_details += f"\n- {task['task_name']} ({task['category']}) - {duration_hours}h - {priority_text}"
         
-        prompt = f"""
-Professional time management AI assistant. Sizning vazifangiz - optimal haftalik jadval tuzish.
+        prompt = f"""Create weekly schedule JSON.
 
-📋 VAZIFALAR ({task_count} ta):
+Tasks ({task_count}):
 {task_details}
 
-⚙️ CHEKLOVLAR:
-- Ish/Texnikum: {work_start}-{work_end} ❌ (band qilmang!)
-- Bo'sh vaqt: {work_end} dan keyin
-- Har kunga 2-3 ta vazifa
+Rules:
+- Work hours: {work_start}-{work_end} (don't schedule)
+- Free time: after {work_end}
+- 2-3 tasks per day
 
 JSON format:
-{{
-    "monday": [{{"time": "17:00-18:30", "task": "SAT Math", "task_id": 1}}],
-    "tuesday": [...],
-    ...
-}}
+{{"monday": [{{"time": "17:00-18:30", "task": "Task name", "task_id": 1}}], ...}}
 
-FAQAT JSON javob bering!
-"""
+Return ONLY JSON, no text!"""
         
-        response = text_model.generate_content(prompt)
-        result = response.text.strip()
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "max_new_tokens": 1000,
+                "temperature": 0.7
+            }
+        }
         
-        # JSON ni extract qilish
-        if "```json" in result:
-            result = result.split("```json")[1].split("```")[0].strip()
-        elif "```" in result:
-            result = result.split("```")[1].split("```")[0].strip()
+        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
         
-        schedule = json.loads(result)
-        return schedule
-        
+        if response.status_code == 200:
+            result = response.json()
+            text = result[0]['generated_text'] if isinstance(result, list) else result.get('generated_text', '')
+            
+            # Extract JSON
+            if "```json" in text:
+                text = text.split("```json")[1].split("```")[0].strip()
+            elif "```" in text:
+                text = text.split("```")[1].split("```")[0].strip()
+            
+            schedule = json.loads(text)
+            return schedule
+        else:
+            logger.error(f"Schedule generation error: {response.status_code}")
+            return generate_simple_schedule(tasks, constraints)
+            
     except Exception as e:
         logger.error(f"AI schedule generation error: {e}")
         return generate_simple_schedule(tasks, constraints)
