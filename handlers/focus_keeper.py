@@ -298,7 +298,7 @@ async def handle_any_photo(message: Message, state: FSMContext):
     planned_duration = active_session.get('planned_duration', 60)
     
     # Task ma'lumotlarini olish
-    task_info = await get_task_by_id(task_id) if task_id else None
+    task_info = await get_task_by_id(task_id, user_id) if task_id else None
     task_name = task_info.get('task_name', 'Unknown Task') if task_info else 'Unknown Task'
     
     logger.info(f"📋 Task: '{task_name}', duration: {planned_duration}min")
@@ -444,8 +444,15 @@ async def receive_focus_photo(message: Message, state: FSMContext):
     await handle_any_photo(message, state)
 
 @router.message(FocusState.waiting_for_photo)
-async def wrong_content_during_focus(message: Message):
+async def wrong_content_during_focus(message: Message, state: FSMContext):
     """Rasm o'rniga boshqa narsa yuborilsa"""
+    
+    # Agar /start yoki boshqa command bo'lsa, state'ni tozalaymiz
+    if message.text and message.text.startswith('/'):
+        await state.clear()
+        logger.info(f"Command received during waiting_for_photo state, clearing state")
+        return
+    
     await message.answer(
         "❌ **RASM KERAK!**\n\n"
         "Bildirishnomani to'xtatish uchun faqat RASM yuboring! 📸\n\n"
