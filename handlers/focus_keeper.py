@@ -433,45 +433,6 @@ async def receive_focus_photo(message: Message, state: FSMContext):
     logger.warning(f"⚠️ DEPRECATED handler triggered for user {message.from_user.id}")
     # Redirect to generic handler
     await handle_any_photo(message, state)
-            f"💪 Fokusda qoling va muvaffaqiyatga erishing!",
-            parse_mode="Markdown",
-            reply_markup=main_menu_keyboard()
-        )
-        
-        # Session data
-        session_with_task = {
-            'id': session_id,
-            'task_id': task_id,
-            'task_name': task_name,
-            'planned_duration': planned_duration
-        }
-        
-        logger.info(f"🚀 Starting Pomodoro timer...")
-        
-        # Pomodoro timerni boshlash
-        try:
-            await start_pomodoro_session(message.bot, user_id, session_with_task)
-            logger.info(f"✅ Pomodoro started successfully")
-        except Exception as pomodoro_error:
-            logger.error(f"❌ Pomodoro failed: {pomodoro_error}", exc_info=True)
-            await message.answer(
-                "⚠️ Timerda xatolik yuz berdi!\n\n"
-                "Iltimos, /start dan qayta boshlang.",
-                parse_mode="Markdown"
-            )
-        
-        # State tozalash
-        await state.clear()
-        
-        logger.info(f"✅ COMPLETE: Photo processed for user {user_id}")
-        
-    except Exception as e:
-        logger.error(f"❌ CRITICAL ERROR processing photo: {e}", exc_info=True)
-        await message.answer(
-            "❌ Rasmni saqlashda xatolik!\n\n"
-            "Iltimos, qayta urinib ko'ring.",
-            reply_markup=main_menu_keyboard()
-        )
 
 @router.message(FocusState.waiting_for_photo)
 async def wrong_content_during_focus(message: Message):
