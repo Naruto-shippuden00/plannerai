@@ -89,13 +89,16 @@ async def start_focus_mode_menu(message: Message):
 async def continuous_notification_sender(bot, user_id: int, session_id: int, task_name: str, start_time: str, end_time: str):
     """
     Cheksiz bildirishnoma yuborish - faqat rasm yuborilganda to'xtaydi
-    Har 5 minutda bir marta bildirishnoma
+    Har 5 minutda bir marta bildirishnoma (test rejimda 30 soniya)
     
-    OPTIMIZED VERSION - better tracking and error handling
+    OPTIMIZED VERSION - better tracking and error handling + TEST MODE support
     """
+    # TEST MODE ni import qilish
+    from handlers.admin import get_notification_interval
+    
     count = 0
     max_notifications = 100  # Xavfsizlik uchun maksimal limit
-    notification_interval = 300  # 5 daqiqa (sekundlarda)
+    notification_interval = get_notification_interval(user_id)  # Test mode support
     
     started_at = datetime.now(TASHKENT_TZ)
     
@@ -360,15 +363,23 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
     """
     Pomodoro timer - planned_duration focus + har 15 daqiqada nazorat
     
-    OPTIMIZED VERSION - dynamic duration, better tracking
+    OPTIMIZED VERSION - dynamic duration, better tracking + TEST MODE support
     """
+    # TEST MODE ni import qilish
+    from handlers.admin import get_pomodoro_duration, is_test_mode
+    
     session_id = session_data['id']
     task_name = session_data['task_name']
-    planned_duration = session_data['planned_duration']
+    planned_duration_original = session_data['planned_duration']
+    
+    # TEST MODE tekshirish
+    planned_duration = get_pomodoro_duration(user_id, planned_duration_original)
+    
+    test_mode_indicator = " [TEST MODE]" if is_test_mode(user_id) else ""
     
     logger.info(
         f"🍅 Starting Pomodoro session: user={user_id}, session={session_id}, "
-        f"task='{task_name}', duration={planned_duration}min"
+        f"task='{task_name}', duration={planned_duration}min{test_mode_indicator}"
     )
     
     # Avvalgi Pomodoro sessiyani to'xtatish
@@ -381,7 +392,7 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
     try:
         await bot.send_message(
             user_id,
-            f"🍅 **POMODORO TIMER BOSHLANDI!**\n\n"
+            f"🍅 **POMODORO TIMER BOSHLANDI!**{test_mode_indicator}\n\n"
             f"🎯 Vazifa: {task_name}\n"
             f"⏱ Davomiyligi: {planned_duration} daqiqa\n\n"
             f"📱 Telefon: Silent mode\n"
@@ -484,12 +495,21 @@ async def finish_pomodoro_session(bot, user_id: int, session_id: int, task_name:
     """
     Pomodoro sessionni yakunlash va tanaffus berish
     
-    OPTIMIZED VERSION - achievements, statistics
+    OPTIMIZED VERSION - achievements, statistics + TEST MODE support
     """
+    # TEST MODE ni import qilish
+    from handlers.admin import get_break_duration, is_test_mode
+    
     logger.info(f"⏱ Waiting {duration_minutes}min for session {session_id} to complete...")
     
     # Duration minutes davom etish
     await asyncio.sleep(duration_minutes * 60)
+    
+    # Break duration
+    break_seconds = get_break_duration(user_id)
+    break_minutes = break_seconds // 60 if break_seconds >= 60 else 1
+    
+    test_mode_indicator = " [TEST MODE]" if is_test_mode(user_id) else ""
     
     logger.info(f"🏁 Pomodoro session completed: user={user_id}, session={session_id}")
     
@@ -514,29 +534,29 @@ async def finish_pomodoro_session(bot, user_id: int, session_id: int, task_name:
         # Tugallanganlik xabari
         await bot.send_message(
             user_id,
-            f"🎉 **VAZIFA TUGADI!**\n\n"
+            f"🎉 **VAZIFA TUGADI!**{test_mode_indicator}\n\n"
             f"🎯 {task_name}\n"
             f"⏱ {duration_minutes} daqiqa\n\n"
             f"✅ Ajoyib ish qildingiz!\n\n"
-            f"🧘‍♂️ Endi 10 daqiqa TANAFFUS!\n\n"
+            f"🧘‍♂️ Endi {break_minutes} daqiqa TANAFFUS!\n\n"
             f"☕️ Choy iching\n"
             f"🚶‍♂️ Biroz yuring\n"
             f"💧 Suv iching\n"
             f"👀 Ko'zingizni dam oldiring\n\n"
-            f"⏰ 10 daqiqadan keyin keyingi vazifaga o'tamiz!",
+            f"⏰ {break_minutes} daqiqadan keyin keyingi vazifaga o'tamiz!",
             parse_mode="Markdown",
             reply_markup=break_time_keyboard()
         )
         
         logger.info(f"✅ Completion message sent to user {user_id}")
         
-        # 10 daqiqa tanaffus
-        await asyncio.sleep(600)  # 10 minut
+        # Tanaffus
+        await asyncio.sleep(break_seconds)
         
         # Tanaffus tugadi
         await bot.send_message(
             user_id,
-            f"⏰ **TANAFFUS TUGADI!**\n\n"
+            f"⏰ **TANAFFUS TUGADI!**{test_mode_indicator}\n\n"
             f"💪 Keyingi vazifaga tayyormisiz?\n\n"
             f"📋 Jadvalingizga qarang!\n\n"
             f"🚀 Davom etamiz!",
