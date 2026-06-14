@@ -22,7 +22,10 @@ from utils.database import (
     mark_task_as_completed,
     get_user_tasks,
     add_achievement,
-    update_user_statistics
+    update_user_statistics,
+    get_task_by_id,
+    get_focus_session_photos,
+    get_user_schedule_for_today
 )
 from utils.keyboards import (
     focus_action_keyboard,
@@ -295,7 +298,6 @@ async def handle_any_photo(message: Message, state: FSMContext):
     planned_duration = active_session.get('planned_duration', 60)
     
     # Task ma'lumotlarini olish
-    from utils.database import get_task_by_id
     task_info = await get_task_by_id(task_id) if task_id else None
     task_name = task_info.get('task_name', 'Unknown Task') if task_info else 'Unknown Task'
     
@@ -333,7 +335,6 @@ async def handle_any_photo(message: Message, state: FSMContext):
             logger.info(f"✅ Notifications already stopped for user {user_id}")
         
         # Photo count
-        from utils.database import get_focus_session_photos
         photos = await get_focus_session_photos(session_id)
         photo_count = len(photos)
         
@@ -474,6 +475,7 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
         await asyncio.sleep(0.1)
     
     # Darhol xabar yuborish va PIN qilish
+    timer_message = None
     try:
         # Timer xabari
         timer_message = await bot.send_message(
@@ -500,13 +502,9 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
         except Exception as pin_error:
             logger.warning(f"⚠️ Could not pin message: {pin_error}")
         
-        # Timer message ID ni saqlash (keyinchalik update qilish uchun)
-        active_pomodoro[user_id] = {
-            'timer_message_id': timer_message.message_id
-        }
-        
     except Exception as e:
         logger.error(f"Error sending Pomodoro start message: {e}")
+        # Agar xabar yuborilmasa, timer_message None bo'ladi
     
     # Har 15 daqiqada focus keeper xabarlari
     # Lekin faqat planned_duration ichida
@@ -523,21 +521,23 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
         )
     
     # Timer xabarini har daqiqada yangilash task
-    timer_update_task = asyncio.create_task(
-        update_timer_message(bot, user_id, session_id, task_name, planned_duration, timer_message.message_id)
-    )
+    timer_update_task = None
+    if timer_message:
+        timer_update_task = asyncio.create_task(
+            update_timer_message(bot, user_id, session_id, task_name, planned_duration, timer_message.message_id)
+        )
     
     # Asosiy Pomodoro timer task
     pomodoro_task = asyncio.create_task(
         finish_pomodoro_session(bot, user_id, session_id, task_name, planned_duration)
     )
     
-    # Tracking - timer_message_id ni ham qo'shamiz
+    # Tracking - barcha ma'lumotlarni to'g'ri o'rnatamiz
     active_pomodoro[user_id] = {
         'task': pomodoro_task,
         'timer_update_task': timer_update_task,
         'session_id': session_id,
-        'timer_message_id': timer_message.message_id,
+        'timer_message_id': timer_message.message_id if timer_message else None,
         'started_at': datetime.now(TASHKENT_TZ)
     }
     
@@ -704,8 +704,11 @@ async def finish_pomodoro_session(bot, user_id: int, session_id: int, task_name:
         timer_message_id = active_pomodoro[user_id].get('timer_message_id')
         
         # Timer update task'ni to'xtatish
-        if 'timer_update_task' in active_pomodoro[user_id]:
-            active_pomodoro[user_id]['timer_update_task'].cancel()
+        if 'timer_update_task' in active_pomodoro[user_id] and active_pomodoro[user_id]['timer_update_task']:
+            try:
+                active_pomodoro[user_id]['timer_update_task'].cancel()
+            except Exception as cancel_error:
+                logger.warning(f"Could not cancel timer update task: {cancel_error}")
         
         del active_pomodoro[user_id]
     
@@ -741,7 +744,6 @@ async def finish_pomodoro_session(bot, user_id: int, session_id: int, task_name:
         await asyncio.sleep(break_seconds)
         
         # Keyingi vazifani olish
-        from utils.database import get_user_schedule_for_today
         from datetime import datetime as dt
         
         today = dt.now(TASHKENT_TZ)
