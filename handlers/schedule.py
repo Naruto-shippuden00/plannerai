@@ -29,17 +29,24 @@ router = Router()
 # Temp storage for generated schedule
 user_schedules = {}
 
-@router.message(F.text == "🤖 AI Jadval")
+@router.message(F.text.in_(["🤖 AI Jadval", "🤖 AI Расписание", "🤖 AI Schedule"]))
 async def generate_ai_schedule(message: Message):
     """AI bilan jadval tuzish"""
+    from utils.database import get_user_language
+    user_lang = await get_user_language(message.from_user.id)
+    
     user_id = message.from_user.id
     tasks = await get_user_tasks(user_id)
     
     if not tasks:
+        texts = {
+            "uz": "❌ Jadval tuzish uchun avval vazifalar qo'shing!\n\n➕ Vazifa qo'shish tugmasini bosing.",
+            "ru": "❌ Сначала добавьте задачи для создания расписания!\n\n➕ Нажмите кнопку Добавить задачу.",
+            "en": "❌ Add tasks first to create schedule!\n\n➕ Click Add Task button."
+        }
         await message.answer(
-            "❌ Jadval tuzish uchun avval vazifalar qo'shing!\n\n"
-            "➕ Vazifa qo'shish tugmasini bosing.",
-            reply_markup=main_menu_keyboard()
+            texts.get(user_lang, texts["uz"]),
+            reply_markup=main_menu_keyboard(user_lang)
         )
         return
     
@@ -92,7 +99,7 @@ async def generate_ai_schedule(message: Message):
             f"📅 Jadval **{work_end}** dan keyin boshlanadi\n\n"
             "**Tasdiqlaysizmi?**",
             parse_mode="Markdown",
-            reply_markup=confirm_schedule_keyboard()
+            reply_markup=confirm_schedule_keyboard(user_lang)
         )
         
     except Exception as e:
@@ -248,7 +255,7 @@ async def cancel_schedule_handler(callback: CallbackQuery):
     )
     await callback.answer()
 
-@router.message(F.text == "📅 Jadval")
+@router.message(F.text.in_(["📅 Jadval", "📅 Расписание", "📅 Schedule"]))
 async def show_schedule(message: Message):
     """Jadvalni ko'rsatish"""
     # TASHKENT VAQTI bo'yicha bugungi kunni topish

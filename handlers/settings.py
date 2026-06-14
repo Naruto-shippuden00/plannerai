@@ -17,25 +17,64 @@ class SettingsStates(StatesGroup):
     waiting_for_start_time = State()
     waiting_for_end_time = State()
 
-@router.message(F.text == "⚙️ Sozlamalar")
+@router.message(F.text.in_(["⚙️ Sozlamalar", "⚙️ Настройки", "⚙️ Settings"]))
 async def show_settings(message: Message):
     """Sozlamalar menyusini ko'rsatish"""
+    from utils.database import get_user_language
+    user_lang = await get_user_language(message.from_user.id)
+    
     user_id = message.from_user.id
     settings = await get_user_settings(user_id)
     
+    titles = {
+        "uz": "⚙️ **Sozlamalar**",
+        "ru": "⚙️ **Настройки**",
+        "en": "⚙️ **Settings**"
+    }
+    
+    work_hours_label = {
+        "uz": "🕐 **Ish vaqti:**",
+        "ru": "🕐 **Рабочее время:**",
+        "en": "🕐 **Work hours:**"
+    }
+    
+    start_label = {
+        "uz": "   Boshlanish:",
+        "ru": "   Начало:",
+        "en": "   Start:"
+    }
+    
+    end_label = {
+        "uz": "   Tugash:",
+        "ru": "   Конец:",
+        "en": "   End:"
+    }
+    
+    timezone_label = {
+        "uz": "🌍 **Vaqt mintaqasi:**",
+        "ru": "🌍 **Часовой пояс:**",
+        "en": "🌍 **Timezone:**"
+    }
+    
+    question = {
+        "uz": "Nimani o'zgartirmoqchisiz?",
+        "ru": "Что вы хотите изменить?",
+        "en": "What do you want to change?"
+    }
+    
     text = (
-        "⚙️ **Sozlamalar**\n\n"
-        f"🕐 **Ish vaqti:**\n"
-        f"   Boshlanish: {settings['work_start_time']}\n"
-        f"   Tugash: {settings['work_end_time']}\n\n"
-        f"🌍 **Vaqt mintaqasi:** {settings['timezone']}\n\n"
-        "Nimani o'zgartirmoqchisiz?"
+        f"{titles[user_lang]}\n\n"
+        f"{work_hours_label[user_lang]}\n"
+        f"{start_label[user_lang]} {settings['work_start_time']}\n"
+        f"{end_label[user_lang]} {settings['work_end_time']}\n\n"
+        f"{timezone_label[user_lang]} {settings['timezone']}\n\n"
+        f"{question[user_lang]}"
     )
     
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=settings_keyboard()
+        reply_markup=settings_keyboard(user_lang)
     )
 
 @router.callback_query(F.data == "change_work_hours")

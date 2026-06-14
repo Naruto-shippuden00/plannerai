@@ -225,94 +225,121 @@ def focus_action_keyboard(session_id: int):
     )
     return keyboard
 
-def task_management_keyboard():
+def task_management_keyboard(language: str = "uz"):
     """Vazifalarni boshqarish menyusi"""
+    texts = {
+        "active": {"uz": "📝 Faol vazifalar", "ru": "📝 Активные задачи", "en": "📝 Active tasks"},
+        "completed": {"uz": "✅ Bajarilganlar", "ru": "✅ Выполненные", "en": "✅ Completed"},
+        "stats": {"uz": "📊 Statistika", "ru": "📊 Статистика", "en": "📊 Statistics"},
+        "home": {"uz": "🏠 Bosh menyu", "ru": "🏠 Главное меню", "en": "🏠 Main Menu"}
+    }
+    
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📝 Faol vazifalar", callback_data="show_active_tasks")],
-            [InlineKeyboardButton(text="✅ Bajarilganlar", callback_data="show_completed_tasks")],
-            [InlineKeyboardButton(text="📊 Statistika", callback_data="task_statistics")],
-            [InlineKeyboardButton(text="🏠 Bosh menyu", callback_data="back_to_main")]
+            [InlineKeyboardButton(text=texts["active"].get(language, texts["active"]["uz"]), callback_data="show_active_tasks")],
+            [InlineKeyboardButton(text=texts["completed"].get(language, texts["completed"]["uz"]), callback_data="show_completed_tasks")],
+            [InlineKeyboardButton(text=texts["stats"].get(language, texts["stats"]["uz"]), callback_data="task_statistics")],
+            [InlineKeyboardButton(text=texts["home"].get(language, texts["home"]["uz"]), callback_data="back_to_main")]
         ]
     )
     return keyboard
 
-def camera_permission_keyboard(has_permission: bool):
+def camera_permission_keyboard(has_permission: bool, language: str = "uz"):
     """Kamera ruxsati klaviaturasi"""
     if has_permission:
+        revoke_text = {"uz": "❌ Ruxsatni bekor qilish", "ru": "❌ Отменить разрешение", "en": "❌ Revoke permission"}
+        back_text = get_text("btn_back", language)
+        
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="❌ Ruxsatni bekor qilish", callback_data="camera_revoke")],
-                [InlineKeyboardButton(text="🔙 Orqaga", callback_data="back_to_main")]
+                [InlineKeyboardButton(text=revoke_text.get(language, revoke_text["uz"]), callback_data="camera_revoke")],
+                [InlineKeyboardButton(text=back_text, callback_data="back_to_main")]
             ]
         )
     else:
+        grant_text = {"uz": "✅ Ruxsat berish", "ru": "✅ Разрешить", "en": "✅ Grant permission"}
+        cancel_text = {"uz": "❌ Bekor qilish", "ru": "❌ Отменить", "en": "❌ Cancel"}
+        
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="✅ Ruxsat berish", callback_data="camera_grant"),
-                    InlineKeyboardButton(text="❌ Bekor qilish", callback_data="back_to_main")
+                    InlineKeyboardButton(text=grant_text.get(language, grant_text["uz"]), callback_data="camera_grant"),
+                    InlineKeyboardButton(text=cancel_text.get(language, cancel_text["uz"]), callback_data="back_to_main")
                 ]
             ]
         )
     return keyboard
 
-def punishment_keyboard():
+def punishment_keyboard(language: str = "uz"):
     """Jazo menyusi"""
+    texts = {
+        "active": {"uz": "⚠️ Faol jazolar", "ru": "⚠️ Активные наказания", "en": "⚠️ Active punishments"},
+        "completed": {"uz": "✅ Bajarilgan jazolar", "ru": "✅ Выполненные наказания", "en": "✅ Completed punishments"},
+        "stats": {"uz": "📊 Statistika", "ru": "📊 Статистика", "en": "📊 Statistics"},
+        "back": {"uz": "🔙 Orqaga", "ru": "🔙 Назад", "en": "🔙 Back"}
+    }
+    
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⚠️ Faol jazolar", callback_data="active_punishments")],
-            [InlineKeyboardButton(text="✅ Bajarilgan jazolar", callback_data="completed_punishments")],
-            [InlineKeyboardButton(text="📊 Statistika", callback_data="punishment_stats")],
-            [InlineKeyboardButton(text="🔙 Orqaga", callback_data="back_to_main")]
+            [InlineKeyboardButton(text=texts["active"].get(language, texts["active"]["uz"]), callback_data="active_punishments")],
+            [InlineKeyboardButton(text=texts["completed"].get(language, texts["completed"]["uz"]), callback_data="completed_punishments")],
+            [InlineKeyboardButton(text=texts["stats"].get(language, texts["stats"]["uz"]), callback_data="punishment_stats")],
+            [InlineKeyboardButton(text=texts["back"].get(language, texts["back"]["uz"]), callback_data="back_to_main")]
         ]
     )
     return keyboard
 
-def focus_reminder_keyboard(task_id: int, session_id: int):
+def focus_reminder_keyboard(task_id: int, session_id: int, language: str = "uz"):
     """Focus eslatmasi uchun klaviatura"""
+    texts = {
+        "start": {"uz": "✅ Boshlash", "ru": "✅ Начать", "en": "✅ Start"},
+        "snooze": {"uz": "⏰ 5 daqiqa kechiktirish", "ru": "⏰ Отложить на 5 минут", "en": "⏰ Snooze 5 minutes"},
+        "skip": {"uz": "❌ Bekor qilish", "ru": "❌ Пропустить", "en": "❌ Skip"}
+    }
+    
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Boshlash", callback_data=f"start_focus_{session_id}")],
-            [InlineKeyboardButton(text="⏰ 5 daqiqa kechiktirish", callback_data=f"snooze_focus_{task_id}")],
-            [InlineKeyboardButton(text="❌ Bekor qilish", callback_data=f"skip_focus_{task_id}")]
+            [InlineKeyboardButton(text=texts["start"].get(language, texts["start"]["uz"]), callback_data=f"start_focus_{session_id}")],
+            [InlineKeyboardButton(text=texts["snooze"].get(language, texts["snooze"]["uz"]), callback_data=f"snooze_focus_{task_id}")],
+            [InlineKeyboardButton(text=texts["skip"].get(language, texts["skip"]["uz"]), callback_data=f"skip_focus_{task_id}")]
         ]
     )
     return keyboard
 
-def break_time_keyboard():
+def break_time_keyboard(language: str = "uz"):
     """Tanaffus vaqti klaviaturasi"""
+    texts = {
+        "tea": {"uz": "☕️ Choy ichyapman", "ru": "☕️ Пью чай", "en": "☕️ Having tea"},
+        "walk": {"uz": "🚶‍♂️ Sayr qilyapman", "ru": "🚶‍♂️ Гуляю", "en": "🚶‍♂️ Walking"},
+        "water": {"uz": "💧 Suv ichyapman", "ru": "💧 Пью воду", "en": "💧 Drinking water"},
+        "rest": {"uz": "🧘‍♂️ Dam olyapman", "ru": "🧘‍♂️ Отдыхаю", "en": "🧘‍♂️ Resting"}
+    }
+    
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="☕️ Choy ichyapman", callback_data="break_tea")],
-            [InlineKeyboardButton(text="🚶‍♂️ Sayr qilyapman", callback_data="break_walk")],
-            [InlineKeyboardButton(text="💧 Suv ichyapman", callback_data="break_water")],
-            [InlineKeyboardButton(text="🧘‍♂️ Dam olyapman", callback_data="break_rest")]
+            [InlineKeyboardButton(text=texts["tea"].get(language, texts["tea"]["uz"]), callback_data="break_tea")],
+            [InlineKeyboardButton(text=texts["walk"].get(language, texts["walk"]["uz"]), callback_data="break_walk")],
+            [InlineKeyboardButton(text=texts["water"].get(language, texts["water"]["uz"]), callback_data="break_water")],
+            [InlineKeyboardButton(text=texts["rest"].get(language, texts["rest"]["uz"]), callback_data="break_rest")]
         ]
     )
     return keyboard
 
-def completion_verification_keyboard(task_id: int):
+def completion_verification_keyboard(task_id: int, language: str = "uz"):
     """Bajarish tasdiqlovchi klaviatura"""
+    texts = {
+        "photo": {"uz": "📸 Rasm yuborish", "ru": "📸 Отправить фото", "en": "📸 Send photo"},
+        "notes": {"uz": "📝 Izoh qo'shish", "ru": "📝 Добавить заметку", "en": "📝 Add notes"},
+        "done": {"uz": "✅ Tayyor", "ru": "✅ Готово", "en": "✅ Done"}
+    }
+    
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📸 Rasm yuborish", callback_data=f"submit_photo_{task_id}")],
-            [InlineKeyboardButton(text="📝 Izoh qo'shish", callback_data=f"add_notes_{task_id}")],
-            [InlineKeyboardButton(text="✅ Tayyor", callback_data=f"verify_complete_{task_id}")]
+            [InlineKeyboardButton(text=texts["photo"].get(language, texts["photo"]["uz"]), callback_data=f"submit_photo_{task_id}")],
+            [InlineKeyboardButton(text=texts["notes"].get(language, texts["notes"]["uz"]), callback_data=f"add_notes_{task_id}")],
+            [InlineKeyboardButton(text=texts["done"].get(language, texts["done"]["uz"]), callback_data=f"verify_complete_{task_id}")]
         ]
     )
     return keyboard
 
-def settings_keyboard():
-    """Sozlamalar menyusi - yangilangan"""
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🕐 Ish vaqtini o'zgartirish", callback_data="change_work_hours")],
-            [InlineKeyboardButton(text="🌍 Vaqt mintaqasi", callback_data="change_timezone")],
-            [InlineKeyboardButton(text="📸 Kamera sozlamalari", callback_data="camera_settings")],
-            [InlineKeyboardButton(text="🔔 Bildirishnoma sozlamalari", callback_data="notification_settings")],
-            [InlineKeyboardButton(text="🔙 Orqaga", callback_data="back_to_menu")]
-        ]
-    )
-    return keyboard
 

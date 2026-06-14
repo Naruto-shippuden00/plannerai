@@ -14,22 +14,27 @@ from utils.keyboards import main_menu_keyboard
 
 router = Router()
 
-@router.message(F.text == "📊 Statistika")
+@router.message(F.text.in_(["📊 Statistika", "📊 Статистика", "📊 Statistics"]))
 async def show_statistics(message: Message):
     """Statistikani ko'rsatish"""
+    from utils.database import get_user_language
+    user_lang = await get_user_language(message.from_user.id)
+    
     user_id = message.from_user.id
     
     # Haftalik statistika
     stats = await get_weekly_stats(user_id)
     
     if stats['total_scheduled'] == 0:
+        texts = {
+            "uz": "❌ **Statistika yo'q**\n\nAvval vazifalar qo'shing va jadval tuzing!\n\n1️⃣ ➕ Vazifa qo'shish\n2️⃣ 🤖 AI Jadval",
+            "ru": "❌ **Нет статистики**\n\nСначала добавьте задачи и создайте расписание!\n\n1️⃣ ➕ Добавить задачу\n2️⃣ 🤖 AI Расписание",
+            "en": "❌ **No statistics**\n\nFirst add tasks and create schedule!\n\n1️⃣ ➕ Add Task\n2️⃣ 🤖 AI Schedule"
+        }
         await message.answer(
-            "❌ **Statistika yo'q**\n\n"
-            "Avval vazifalar qo'shing va jadval tuzing!\n\n"
-            "1️⃣ ➕ Vazifa qo'shish\n"
-            "2️⃣ 🤖 AI Jadval",
+            texts.get(user_lang, texts["uz"]),
             parse_mode="Markdown",
-            reply_markup=main_menu_keyboard()
+            reply_markup=main_menu_keyboard(user_lang)
         )
         return
     

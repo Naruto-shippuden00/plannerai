@@ -34,88 +34,129 @@ class AddTaskState(StatesGroup):
     waiting_for_priority = State()
     waiting_for_duration = State()
 
-@router.message(F.text == "➕ Vazifa qo'shish")
+@router.message(F.text.in_(["➕ Vazifa qo'shish", "➕ Добавить задачу", "➕ Add Task"]))
 async def add_task_start(message: Message, state: FSMContext):
     """Vazifa qo'shish boshlash"""
+    from utils.database import get_user_language
+    user_lang = await get_user_language(message.from_user.id)
+    
+    texts = {
+        "uz": "📝 **Yangi vazifa qo'shish**\n\nVazifa nomini kiriting:\n\nMisol: SAT Math practice\nMisol: Python dasturlash o'rganish\nMisol: Kitob o'qish - 'Atomic Habits'",
+        "ru": "📝 **Добавить новую задачу**\n\nВведите название задачи:\n\nПример: SAT Math practice\nПример: Изучение Python\nПример: Чтение книги - 'Atomic Habits'",
+        "en": "📝 **Add New Task**\n\nEnter task name:\n\nExample: SAT Math practice\nExample: Learn Python programming\nExample: Read book - 'Atomic Habits'"
+    }
+    
     await state.set_state(AddTaskState.waiting_for_name)
-    await message.answer(
-        "📝 **Yangi vazifa qo'shish**\n\n"
-        "Vazifa nomini kiriting:\n\n"
-        "Misol: SAT Math practice\n"
-        "Misol: Python dasturlash o'rganish\n"
-        "Misol: Kitob o'qish - 'Atomic Habits'",
-        parse_mode="Markdown"
-    )
+    await message.answer(texts.get(user_lang, texts["uz"]), parse_mode="Markdown")
 
 @router.message(AddTaskState.waiting_for_name)
 async def add_task_name(message: Message, state: FSMContext):
     """Vazifa nomi"""
+    from utils.database import get_user_language
+    user_lang = await get_user_language(message.from_user.id)
+    
     await state.update_data(task_name=message.text)
     await state.set_state(AddTaskState.waiting_for_category)
     
+    prompts = {
+        "uz": f"✅ Vazifa: **{message.text}**\n\nKategoriyani tanlang:",
+        "ru": f"✅ Задача: **{message.text}**\n\nВыберите категорию:",
+        "en": f"✅ Task: **{message.text}**\n\nSelect category:"
+    }
+    
     await message.answer(
-        f"✅ Vazifa: **{message.text}**\n\n"
-        "Kategoriyani tanlang:",
+        prompts.get(user_lang, prompts["uz"]),
         parse_mode="Markdown",
-        reply_markup=task_category_keyboard()
+        reply_markup=task_category_keyboard(user_lang)
     )
 
 @router.callback_query(F.data.startswith("cat_"))
 async def add_task_category(callback: CallbackQuery, state: FSMContext):
     """Kategoriya tanlash"""
+    from utils.database import get_user_language
+    user_lang = await get_user_language(callback.from_user.id)
+    
     category_map = {
         "cat_sat": "SAT",
         "cat_ielts": "IELTS",
         "cat_python": "Python",
         "cat_startup": "Startup",
         "cat_gym": "Gym",
-        "cat_book": "Kitob",
-        "cat_other": "Boshqa"
+        "cat_book": {"uz": "Kitob", "ru": "Книга", "en": "Book"},
+        "cat_other": {"uz": "Boshqa", "ru": "Другое", "en": "Other"}
     }
     
-    category = category_map.get(callback.data, "Boshqa")
+    category_raw = category_map.get(callback.data, "Boshqa")
+    if isinstance(category_raw, dict):
+        category = category_raw.get(user_lang, category_raw["uz"])
+    else:
+        category = category_raw
+        
     await state.update_data(category=category)
     await state.set_state(AddTaskState.waiting_for_priority)
     
+    texts = {
+        "uz": f"📂 Kategoriya: **{category}**\n\nPrioritetni tanlang:",
+        "ru": f"📂 Категория: **{category}**\n\nВыберите приоритет:",
+        "en": f"📂 Category: **{category}**\n\nSelect priority:"
+    }
+    
     await callback.message.edit_text(
-        f"📂 Kategoriya: **{category}**\n\n"
-        "Prioritetni tanlang:",
+        texts.get(user_lang, texts["uz"]),
         parse_mode="Markdown",
-        reply_markup=priority_keyboard()
+        reply_markup=priority_keyboard(user_lang)
     )
     await callback.answer()
 
 @router.callback_query(F.data.startswith("priority_"))
 async def add_task_priority(callback: CallbackQuery, state: FSMContext):
     """Prioritet tanlash"""
+    from utils.database import get_user_language
+    user_lang = await get_user_language(callback.from_user.id)
+    
     priority = int(callback.data.split("_")[1])
     await state.update_data(priority=priority)
     await state.set_state(AddTaskState.waiting_for_duration)
     
-    priority_text = {3: "🔴 Juda muhim", 2: "🟡 O'rtacha", 1: "🟢 Past"}
+    priority_texts = {
+        "uz": {3: "🔴 Juda muhim", 2: "🟡 O'rtacha", 1: "🟢 Past"},
+        "ru": {3: "🔴 Очень важно", 2: "🟡 Средне", 1: "🟢 Низкий"},
+        "en": {3: "🔴 Very important", 2: "🟡 Medium", 1: "🟢 Low"}
+    }
+    
+    duration_prompt = {
+        "uz": "⏱ Davomiylikni tanlang:",
+        "ru": "⏱ Выберите продолжительность:",
+        "en": "⏱ Select duration:"
+    }
+    
+    priority_text = priority_texts.get(user_lang, priority_texts["uz"])[priority]
     
     await callback.message.edit_text(
-        f"⭐ Prioritet: **{priority_text[priority]}**\n\n"
-        "Davomiylikni tanlang:",
+        f"⭐ {priority_text}\n\n{duration_prompt.get(user_lang, duration_prompt['uz'])}",
         parse_mode="Markdown",
-        reply_markup=duration_keyboard()
+        reply_markup=duration_keyboard(user_lang)
     )
     await callback.answer()
 
 @router.callback_query(F.data.startswith("dur_"))
 async def add_task_duration(callback: CallbackQuery, state: FSMContext):
     """Davomiylik tanlash"""
+    from utils.database import get_user_language
+    user_lang = await get_user_language(callback.from_user.id)
+    
     if callback.data == "dur_custom":
         # Custom duration uchun state'ni saqlash
         await state.set_state(AddTaskState.waiting_for_duration)
+        
+        prompts = {
+            "uz": "⏱ **Davomiylikni daqiqalarda kiriting:**\n\nMasalan:\n• 15 (15 daqiqa)\n• 45 (45 daqiqa)\n• 90 (1 soat 30 daqiqa)\n• 120 (2 soat)\n\nFaqat RAQAM kiriting!",
+            "ru": "⏱ **Введите продолжительность в минутах:**\n\nНапример:\n• 15 (15 минут)\n• 45 (45 минут)\n• 90 (1 час 30 минут)\n• 120 (2 часа)\n\nВводите только ЧИСЛО!",
+            "en": "⏱ **Enter duration in minutes:**\n\nFor example:\n• 15 (15 minutes)\n• 45 (45 minutes)\n• 90 (1 hour 30 minutes)\n• 120 (2 hours)\n\nEnter NUMBER only!"
+        }
+        
         await callback.message.edit_text(
-            "⏱ **Davomiylikni daqiqalarda kiriting:**\n\n"
-            "Masalan:\n"
-            "• 15 (15 daqiqa)\n"
-            "• 45 (45 daqiqa)\n"
-            "• 90 (1 soat 30 daqiqa)\n"
-            "• 120 (2 soat)\n\n"
-            "Faqat RAQAM kiriting!",
+            prompts.get(user_lang, prompts["uz"]),
             parse_mode="Markdown"
         )
         await callback.answer()
@@ -135,34 +176,28 @@ async def add_task_duration(callback: CallbackQuery, state: FSMContext):
     
     await state.clear()
     
+    success_texts = {
+        "uz": f"✅ **VAZIFA MUVAFFAQIYATLI QO'SHILDI!**\n\n📝 Nomi: **{data['task_name']}**\n📂 Kategoriya: {data['category']}\n⭐ Prioritet: {data['priority']}/3\n⏱ Davomiyligi: {duration} daqiqa\n\n═══════════════════════\n\n🎯 **KEYINGI QADAMLAR:**\n\n1️⃣ Yana vazifa qo'shing (ixtiyoriy)\n2️⃣ **'🤖 AI Jadval'** tugmasini bosing\n3️⃣ AI optimal jadval tuzadi\n4️⃣ Jadvalni tasdiqlang\n\n⏰ **KEYIN AVTOMATIK:**\n• Vazifa vaqti kelganda bildirishnoma\n• Har 5 daqiqada eslatma (rasm yuborguningizcha)\n• Rasm yuborish → Pomodoro timer\n• {duration} daqiqa fokusda ishlash\n• 10 daqiqa tanaffus\n• Keyingi vazifa avtomatik boshlanadi\n\n💪 **100% avtomatik nazorat!**",
+        "ru": f"✅ **ЗАДАЧА УСПЕШНО ДОБАВЛЕНА!**\n\n📝 Название: **{data['task_name']}**\n📂 Категория: {data['category']}\n⭐ Приоритет: {data['priority']}/3\n⏱ Продолжительность: {duration} минут\n\n═══════════════════════\n\n🎯 **СЛЕДУЮЩИЕ ШАГИ:**\n\n1️⃣ Добавьте еще задачи (опционально)\n2️⃣ Нажмите **'🤖 AI Расписание'**\n3️⃣ AI создаст оптимальное расписание\n4️⃣ Подтвердите расписание\n\n⏰ **ЗАТЕМ АВТОМАТИЧЕСКИ:**\n• Уведомление при наступлении времени\n• Напоминания каждые 5 минут (пока не отправите фото)\n• Отправка фото → Pomodoro таймер\n• {duration} минут в фокусе\n• 10 минут перерыв\n• Следующая задача запускается автоматически\n\n💪 **100% автоматический контроль!**",
+        "en": f"✅ **TASK SUCCESSFULLY ADDED!**\n\n📝 Name: **{data['task_name']}**\n📂 Category: {data['category']}\n⭐ Priority: {data['priority']}/3\n⏱ Duration: {duration} minutes\n\n═══════════════════════\n\n🎯 **NEXT STEPS:**\n\n1️⃣ Add more tasks (optional)\n2️⃣ Click **'🤖 AI Schedule'** button\n3️⃣ AI creates optimal schedule\n4️⃣ Confirm schedule\n\n⏰ **THEN AUTOMATICALLY:**\n• Notification when task time comes\n• Reminders every 5 minutes (until you send photo)\n• Send photo → Pomodoro timer\n• {duration} minutes in focus\n• 10 minute break\n• Next task starts automatically\n\n💪 **100% automatic control!**"
+    }
+    
+    next_prompts = {
+        "uz": "🎯 Yana vazifa qo'shasizmi yoki jadvalni tuzamizmi?",
+        "ru": "🎯 Добавить еще задачу или создать расписание?",
+        "en": "🎯 Add another task or create schedule?"
+    }
+    
     await callback.message.edit_text(
-        f"✅ **VAZIFA MUVAFFAQIYATLI QO'SHILDI!**\n\n"
-        f"📝 Nomi: **{data['task_name']}**\n"
-        f"📂 Kategoriya: {data['category']}\n"
-        f"⭐ Prioritet: {data['priority']}/3\n"
-        f"⏱ Davomiyligi: {duration} daqiqa\n\n"
-        f"═══════════════════════\n\n"
-        f"🎯 **KEYINGI QADAMLAR:**\n\n"
-        f"1️⃣ Yana vazifa qo'shing (ixtiyoriy)\n"
-        f"2️⃣ **'🤖 AI Jadval'** tugmasini bosing\n"
-        f"3️⃣ AI optimal jadval tuzadi\n"
-        f"4️⃣ Jadvalni tasdiqlang\n\n"
-        f"⏰ **KEYIN AVTOMATIK:**\n"
-        f"• Vazifa vaqti kelganda bildirishnoma\n"
-        f"• Har 5 daqiqada eslatma (rasm yuborguningizcha)\n"
-        f"• Rasm yuborish → Pomodoro timer\n"
-        f"• {duration} daqiqa fokusda ishlash\n"
-        f"• 10 daqiqa tanaffus\n"
-        f"• Keyingi vazifa avtomatik boshlanadi\n\n"
-        f"💪 **100% avtomatik nazorat!**",
+        success_texts.get(user_lang, success_texts["uz"]),
         parse_mode="Markdown"
     )
     
     await callback.message.answer(
-        "🎯 Yana vazifa qo'shasizmi yoki jadvalni tuzamizmi?",
-        reply_markup=main_menu_keyboard()
+        next_prompts.get(user_lang, next_prompts["uz"]),
+        reply_markup=main_menu_keyboard(user_lang)
     )
-    await callback.answer("✅ Vazifa qo'shildi!", show_alert=False)
+    await callback.answer("✅ Vazifa qo'shildi!" if user_lang == "uz" else "✅ Задача добавлена!" if user_lang == "ru" else "✅ Task added!", show_alert=False)
 
 # Custom duration handler
 @router.message(AddTaskState.waiting_for_duration, F.text)
@@ -220,20 +255,29 @@ async def add_task_custom_duration(message: Message, state: FSMContext):
             parse_mode="Markdown"
         )
 
-@router.message(F.text == "📋 Vazifalarim")
+@router.message(F.text.in_(["📋 Vazifalarim", "📋 Мои задачи", "📋 My Tasks"]))
 async def show_tasks(message: Message):
     """Vazifalarni ko'rsatish"""
+    from utils.database import get_user_language
+    user_lang = await get_user_language(message.from_user.id)
+    
     tasks = await get_user_tasks(message.from_user.id)
     
     if not tasks:
-        await message.answer(
-            "📋 **Sizda hali vazifalar yo'q**\n\n"
-            "➕ Vazifa qo'shish tugmasini bosing!",
-            parse_mode="Markdown"
-        )
+        texts = {
+            "uz": "📋 **Sizda hali vazifalar yo'q**\n\n➕ Vazifa qo'shish tugmasini bosing!",
+            "ru": "📋 **У вас пока нет задач**\n\n➕ Нажмите кнопку Добавить задачу!",
+            "en": "📋 **You have no tasks yet**\n\n➕ Click Add Task button!"
+        }
+        await message.answer(texts.get(user_lang, texts["uz"]), parse_mode="Markdown")
         return
     
-    text = "📋 **Sizning vazifalaringiz:**\n\n"
+    title_texts = {
+        "uz": "📋 **Sizning vazifalaringiz:**\n\n",
+        "ru": "📋 **Ваши задачи:**\n\n",
+        "en": "📋 **Your tasks:**\n\n"
+    }
+    text = title_texts.get(user_lang, title_texts["uz"])
     
     # Kategoriya bo'yicha guruplash
     by_category = {}
@@ -250,7 +294,11 @@ async def show_tasks(message: Message):
         "Startup": "💡",
         "Gym": "💪",
         "Kitob": "📖",
-        "Boshqa": "📌"
+        "Книга": "📖",
+        "Book": "📖",
+        "Boshqa": "📌",
+        "Другое": "📌",
+        "Other": "📌"
     }
     
     for category, cat_tasks in by_category.items():
@@ -261,8 +309,12 @@ async def show_tasks(message: Message):
             priority_emoji = "🔴" if task['priority'] == 3 else "🟡" if task['priority'] == 2 else "🟢"
             text += f"  {priority_emoji} {task['task_name']} ({task['duration_minutes']} min)\n"
     
-    text += f"\n\n📊 Jami: {len(tasks)} ta vazifa"
-    text += "\n\n💡 Vazifani boshqarish uchun quyidagi tugmalarni bosing:"
+    footer_texts = {
+        "uz": f"\n\n📊 Jami: {len(tasks)} ta vazifa\n\n💡 Vazifani boshqarish uchun quyidagi tugmalarni bosing:",
+        "ru": f"\n\n📊 Всего: {len(tasks)} задач\n\n💡 Для управления задачами нажмите кнопки ниже:",
+        "en": f"\n\n📊 Total: {len(tasks)} tasks\n\n💡 Click buttons below to manage tasks:"
+    }
+    text += footer_texts.get(user_lang, footer_texts["uz"])
     
     await message.answer(text, parse_mode="Markdown")
     
@@ -270,14 +322,21 @@ async def show_tasks(message: Message):
     for task in tasks:
         task_text = f"📝 **{task['task_name']}**\n"
         task_text += f"📂 {task['category']} | ⏱ {task['duration_minutes']} min\n"
-        priority_text = "🔴 Juda muhim" if task['priority'] == 3 else "🟡 O'rtacha" if task['priority'] == 2 else "🟢 Past"
-        task_text += f"⭐ Prioritet: {priority_text}"
+        
+        priority_texts = {
+            "uz": {"3": "🔴 Juda muhim", "2": "🟡 O'rtacha", "1": "🟢 Past"},
+            "ru": {"3": "🔴 Очень важно", "2": "🟡 Средне", "1": "🟢 Низкий"},
+            "en": {"3": "🔴 Very important", "2": "🟡 Medium", "1": "🟢 Low"}
+        }
+        priority_text = priority_texts.get(user_lang, priority_texts["uz"])[str(task['priority'])]
+        task_text += f"⭐ {priority_text}"
         
         await message.answer(
             task_text,
             parse_mode="Markdown",
-            reply_markup=task_action_keyboard(task['id'])
+            reply_markup=task_action_keyboard(task['id'], user_lang)
         )
+
 
 @router.callback_query(F.data.startswith("delete_"))
 async def delete_task_handler(callback: CallbackQuery):
@@ -399,30 +458,37 @@ async def confirm_remove_task(message: Message):
             reply_markup=main_menu_keyboard()
         )
 
-@router.message(F.text == "🗑 Vazifalarni boshqarish")
+@router.message(F.text.in_(["🗑 Vazifalarni boshqarish", "🗑 Управление задачами", "🗑 Manage Tasks"]))
 async def manage_tasks_menu(message: Message):
     """Vazifalarni boshqarish menyusi"""
+    from utils.database import get_user_language
+    user_lang = await get_user_language(message.from_user.id)
+    
     tasks = await get_user_tasks(message.from_user.id)
     completed_tasks = await get_completed_tasks(message.from_user.id)
     
     if not tasks and not completed_tasks:
+        texts = {
+            "uz": "📋 **Sizda vazifalar yo'q**\n\nAvval vazifa qo'shing!",
+            "ru": "📋 **У вас нет задач**\n\nСначала добавьте задачу!",
+            "en": "📋 **You have no tasks**\n\nAdd task first!"
+        }
         await message.answer(
-            "📋 **Sizda vazifalar yo'q**\n\n"
-            "Avval vazifa qo'shing!",
-            reply_markup=main_menu_keyboard()
+            texts.get(user_lang, texts["uz"]),
+            reply_markup=main_menu_keyboard(user_lang)
         )
         return
     
+    title_texts = {
+        "uz": "🗑 **VAZIFALARNI BOSHQARISH**\n\nBu yerda barcha vazifalaringizni ko'rishingiz va boshqarishingiz mumkin:\n\n• ✅ Bajarilganlar\n• 📝 Faol vazifalar\n• 🗑 O'chirish\n• 🔄 Qayta faollashtirish\n\nQuyidagi bo'limlarni tanlang:",
+        "ru": "🗑 **УПРАВЛЕНИЕ ЗАДАЧАМИ**\n\nЗдесь вы можете просматривать и управлять всеми задачами:\n\n• ✅ Выполненные\n• 📝 Активные задачи\n• 🗑 Удалить\n• 🔄 Реактивировать\n\nВыберите раздел ниже:",
+        "en": "🗑 **TASK MANAGEMENT**\n\nHere you can view and manage all your tasks:\n\n• ✅ Completed\n• 📝 Active tasks\n• 🗑 Delete\n• 🔄 Reactivate\n\nSelect section below:"
+    }
+    
     await message.answer(
-        "🗑 **VAZIFALARNI BOSHQARISH**\n\n"
-        "Bu yerda barcha vazifalaringizni ko'rishingiz va boshqarishingiz mumkin:\n\n"
-        "• ✅ Bajarilganlar\n"
-        "• 📝 Faol vazifalar\n"
-        "• 🗑 O'chirish\n"
-        "• 🔄 Qayta faollashtirish\n\n"
-        "Quyidagi bo'limlarni tanlang:",
+        title_texts.get(user_lang, title_texts["uz"]),
         parse_mode="Markdown",
-        reply_markup=task_management_keyboard()
+        reply_markup=task_management_keyboard(user_lang)
     )
 
 @router.callback_query(F.data == "show_active_tasks")

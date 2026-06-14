@@ -51,9 +51,12 @@ class FocusState(StatesGroup):
     waiting_for_notes = State()
     camera_verification = State()
 
-@router.message(F.text == "🎯 Focus Mode")
+@router.message(F.text.in_(["🎯 Focus Mode", "🎯 Focus Mode", "🎯 Focus Mode"]))
 async def start_focus_mode_menu(message: Message):
     """Focus mode menyu"""
+    from utils.database import get_user_language
+    user_lang = await get_user_language(message.from_user.id)
+    
     active_session = await get_active_focus_session(message.from_user.id)
     
     if active_session:
