@@ -345,34 +345,77 @@ async def handle_any_photo(message: Message, state: FSMContext):
             except Exception as e:
                 logger.warning(f"Could not add achievement: {e}")
         
-        # AI TAHLIL QILISH
+        # Foydalanuvchi tilini olish
+        from utils.database import get_user_language
+        try:
+            user_language = await get_user_language(user_id)
+        except Exception as e:
+            logger.warning(f"Could not get user language: {e}")
+            user_language = "uz"
+        
+        # AI TAHLIL QILISH VA TASDIQLASH
         logger.info(f"🤖 AI analysis step starting...")
         try:
             from utils.ai_helper import analyze_task_photo
+            from utils.translations import get_text
             
             await message.answer(
-                "🤖 **AI TAHLIL QILINMOQDA...**\n\n"
-                "📸 Rasmingizni tahlil qilyapman...\n"
-                "⏳ Bir necha soniya kuting...",
+                get_text("ai_analyzing", user_language),
                 parse_mode="Markdown"
             )
             
             logger.info(f"🤖 Calling AI analysis...")
-            analysis_result = await analyze_task_photo(photo_path, task_id, user_id)
-            logger.info(f"✅ AI analysis completed: {len(analysis_result)} chars")
+            analysis_result = await analyze_task_photo(photo_path, task_id, user_id, user_language)
+            logger.info(f"✅ AI analysis completed: is_valid={analysis_result.get('is_valid')}, confidence={analysis_result.get('confidence'):.2f}")
+            
+            # Rasm tasdiqlanmasa, bildirishnomalarni qayta boshlash
+            if not analysis_result.get("is_valid", True):
+                logger.warning(f"❌ Photo rejected by AI for user {user_id}")
+                
+                await message.answer(
+                    f"{get_text('ai_result_title', user_language)}\n\n"
+                    f"{analysis_result['message']}\n\n"
+                    f"{get_text('ai_analysis_complete', user_language)}",
+                    parse_mode="Markdown"
+                )
+                
+                # Rasmni o'chirish (disk joy tejash)
+                try:
+                    import os
+                    if os.path.exists(photo_path):
+                        os.remove(photo_path)
+                        logger.info(f"🗑 Rejected photo deleted: {photo_path}")
+                except Exception as del_err:
+                    logger.warning(f"Could not delete rejected photo: {del_err}")
+                
+                # Bildirishnomalarni qayta boshlash
+                logger.info(f"🔔 Restarting notifications for user {user_id}")
+                schedule_time = f"{datetime.now(TASHKENT_TZ).strftime('%H:%M')}"
+                await start_continuous_notifications(
+                    message.bot, 
+                    user_id, 
+                    session_id, 
+                    task_name, 
+                    schedule_time, 
+                    f"{(datetime.now(TASHKENT_TZ) + timedelta(minutes=planned_duration)).strftime('%H:%M')}"
+                )
+                
+                return  # Keyingi kodlarni bajarmaslik
+            
+            # Rasm qabul qilindi
+            logger.info(f"✅ Photo accepted by AI")
             
             await message.answer(
-                f"🤖 **AI TAHLIL NATIJASI**\n\n"
-                f"{analysis_result}\n\n"
-                f"✅ Tahlil yakunlandi!",
+                f"{get_text('ai_result_title', user_language)}\n\n"
+                f"{analysis_result['message']}\n\n"
+                f"{get_text('ai_analysis_complete', user_language)}",
                 parse_mode="Markdown"
             )
             
         except Exception as e:
             logger.error(f"❌ AI analysis failed: {e}", exc_info=True)
             await message.answer(
-                "⚠️ AI tahlil qilishda xatolik yuz berdi.\n\n"
-                "Lekin davom etamiz! Timer boshlanadi...",
+                get_text("ai_technical_error", user_language),
                 parse_mode="Markdown"
             )
         
@@ -380,14 +423,9 @@ async def handle_any_photo(message: Message, state: FSMContext):
         
         # Pomodoro timer start xabari
         await message.answer(
-            f"✅ **RASM QABUL QILINDI!** ({photo_count}-rasm)\n\n"
-            f"🎉 Ajoyib! Bildirishnomalar allaqachon to'xtatilgan!\n\n"
-            f"⏱ Endi **POMODORO TIMER** boshlanadi!\n\n"
-            f"📊 Sizda {planned_duration} daqiqalik fokus sessiya bor.\n"
-            f"🔥 Men sizni nazorat qilib turaman!\n\n"
-            f"💪 Fokusda qoling va muvaffaqiyatga erishing!",
+            get_text("photo_accepted", user_language, count=photo_count, duration=planned_duration),
             parse_mode="Markdown",
-            reply_markup=main_menu_keyboard()
+            reply_markup=main_menu_keyboard(user_language)
         )
         
         logger.info(f"✅ Confirmation message sent!")
@@ -453,11 +491,17 @@ async def wrong_content_during_focus(message: Message, state: FSMContext):
         logger.info(f"Command received during waiting_for_photo state, clearing state")
         return
     
+    # Foydalanuvchi tilini olish
+    from utils.database import get_user_language
+    from utils.translations import get_text
+    try:
+        user_language = await get_user_language(message.from_user.id)
+    except Exception:
+        user_language = "uz"
+    
     await message.answer(
-        "❌ **RASM KERAK!**\n\n"
-        "Bildirishnomani to'xtatish uchun faqat RASM yuboring! 📸\n\n"
-        "Matn yoki boshqa narsalar qabul qilinmaydi!\n\n"
-        "📸 Vazifangizni bajarayotganingizni tasdiqlovchi rasm yuboring!"
+        get_text("send_photo_required", user_language),
+        parse_mode="Markdown"
     )
 
 async def start_pomodoro_session(bot, user_id: int, session_data: dict):

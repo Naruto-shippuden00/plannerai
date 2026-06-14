@@ -424,6 +424,19 @@ async def toggle_notification(callback: CallbackQuery):
     else:
         await callback.answer("Xatolik yuz berdi!", show_alert=True)
 
+@router.callback_query(F.data == "change_language")
+async def change_language_menu(callback: CallbackQuery):
+    """Tilni o'zgartirish menyusi"""
+    from utils.keyboards import language_selection_keyboard
+    
+    await callback.message.edit_text(
+        "🌐 **Change Language / Изменить язык / Tilni o'zgartirish**\n\n"
+        "Select your preferred language:",
+        reply_markup=language_selection_keyboard(),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
 @router.message(F.text == "/settings")
 async def cmd_settings(message: Message):
     """Sozlamalar buyrug'i"""

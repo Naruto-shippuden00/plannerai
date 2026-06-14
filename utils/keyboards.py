@@ -2,100 +2,128 @@
 Telegram bot keyboards
 """
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from utils.translations import get_text
 
-def main_menu_keyboard():
+def language_selection_keyboard():
+    """Til tanlash klaviaturasi"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🇺🇿 O'zbek", callback_data="lang_uz")],
+            [InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang_ru")],
+            [InlineKeyboardButton(text="🇬🇧 English", callback_data="lang_en")]
+        ]
+    )
+    return keyboard
+
+def main_menu_keyboard(language: str = "uz"):
     """Asosiy menyu"""
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📋 Vazifalarim"), KeyboardButton(text="📅 Jadval")],
-            [KeyboardButton(text="➕ Vazifa qo'shish"), KeyboardButton(text="🤖 AI Jadval")],
-            [KeyboardButton(text="🎯 Focus Mode"), KeyboardButton(text="📊 Statistika")],
-            [KeyboardButton(text="🗑 Vazifalarni boshqarish"), KeyboardButton(text="⚠️ Jazolarim")],
-            [KeyboardButton(text="⚙️ Sozlamalar"), KeyboardButton(text="❓ Yordam")]
+            [
+                KeyboardButton(text=get_text("btn_my_tasks", language)), 
+                KeyboardButton(text=get_text("btn_schedule", language))
+            ],
+            [
+                KeyboardButton(text=get_text("btn_add_task", language)), 
+                KeyboardButton(text=get_text("btn_ai_schedule", language))
+            ],
+            [
+                KeyboardButton(text=get_text("btn_focus_mode", language)), 
+                KeyboardButton(text=get_text("btn_statistics", language))
+            ],
+            [
+                KeyboardButton(text=get_text("btn_manage_tasks", language)), 
+                KeyboardButton(text=get_text("btn_punishments", language))
+            ],
+            [
+                KeyboardButton(text=get_text("btn_settings", language)), 
+                KeyboardButton(text=get_text("btn_help", language))
+            ]
         ],
         resize_keyboard=True
     )
     return keyboard
 
-def task_category_keyboard():
+def task_category_keyboard(language: str = "uz"):
     """Vazifa kategoriyasi tanlash"""
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📚 SAT", callback_data="cat_sat")],
-            [InlineKeyboardButton(text="🗣 IELTS", callback_data="cat_ielts")],
-            [InlineKeyboardButton(text="🐍 Python", callback_data="cat_python")],
-            [InlineKeyboardButton(text="💡 Startup", callback_data="cat_startup")],
-            [InlineKeyboardButton(text="💪 Gym", callback_data="cat_gym")],
-            [InlineKeyboardButton(text="📖 Kitob", callback_data="cat_book")],
-            [InlineKeyboardButton(text="➕ Boshqa", callback_data="cat_other")]
+            [InlineKeyboardButton(text=get_text("cat_sat", language), callback_data="cat_sat")],
+            [InlineKeyboardButton(text=get_text("cat_ielts", language), callback_data="cat_ielts")],
+            [InlineKeyboardButton(text=get_text("cat_python", language), callback_data="cat_python")],
+            [InlineKeyboardButton(text=get_text("cat_startup", language), callback_data="cat_startup")],
+            [InlineKeyboardButton(text=get_text("cat_gym", language), callback_data="cat_gym")],
+            [InlineKeyboardButton(text=get_text("cat_book", language), callback_data="cat_book")],
+            [InlineKeyboardButton(text=get_text("cat_other", language), callback_data="cat_other")]
         ]
     )
     return keyboard
 
-def priority_keyboard():
+def priority_keyboard(language: str = "uz"):
     """Prioritet tanlash"""
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🔴 Juda muhim (3)", callback_data="priority_3")],
-            [InlineKeyboardButton(text="🟡 O'rtacha (2)", callback_data="priority_2")],
-            [InlineKeyboardButton(text="🟢 Past (1)", callback_data="priority_1")]
+            [InlineKeyboardButton(text=get_text("priority_high", language), callback_data="priority_3")],
+            [InlineKeyboardButton(text=get_text("priority_medium", language), callback_data="priority_2")],
+            [InlineKeyboardButton(text=get_text("priority_low", language), callback_data="priority_1")]
         ]
     )
     return keyboard
 
-def duration_keyboard():
+def duration_keyboard(language: str = "uz"):
     """Davomiylik tanlash"""
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="30 min", callback_data="dur_30"),
-                InlineKeyboardButton(text="1 soat", callback_data="dur_60")
+                InlineKeyboardButton(text=get_text("dur_30min", language), callback_data="dur_30"),
+                InlineKeyboardButton(text=get_text("dur_1hour", language), callback_data="dur_60")
             ],
             [
-                InlineKeyboardButton(text="1.5 soat", callback_data="dur_90"),
-                InlineKeyboardButton(text="2 soat", callback_data="dur_120")
+                InlineKeyboardButton(text=get_text("dur_1_5hours", language), callback_data="dur_90"),
+                InlineKeyboardButton(text=get_text("dur_2hours", language), callback_data="dur_120")
             ],
-            [InlineKeyboardButton(text="➕ Boshqa", callback_data="dur_custom")]
+            [InlineKeyboardButton(text=get_text("dur_other", language), callback_data="dur_custom")]
         ]
     )
     return keyboard
 
-def confirm_schedule_keyboard():
+def confirm_schedule_keyboard(language: str = "uz"):
     """Jadvalni tasdiqlash"""
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Tasdiqlash", callback_data="confirm_schedule"),
-                InlineKeyboardButton(text="🔄 Qayta tuzish", callback_data="regenerate_schedule")
+                InlineKeyboardButton(text=get_text("btn_confirm", language), callback_data="confirm_schedule"),
+                InlineKeyboardButton(text=get_text("btn_regenerate", language), callback_data="regenerate_schedule")
             ],
-            [InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_schedule")]
+            [InlineKeyboardButton(text=get_text("btn_cancel", language), callback_data="cancel_schedule")]
         ]
     )
     return keyboard
 
-def task_action_keyboard(task_id: int):
+def task_action_keyboard(task_id: int, language: str = "uz"):
     """Vazifa amalllari"""
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Bajarildi", callback_data=f"complete_{task_id}"),
-                InlineKeyboardButton(text="⏰ Keyinroq", callback_data=f"snooze_{task_id}")
+                InlineKeyboardButton(text=get_text("btn_completed", language), callback_data=f"complete_{task_id}"),
+                InlineKeyboardButton(text=get_text("btn_later", language), callback_data=f"snooze_{task_id}")
             ],
-            [InlineKeyboardButton(text="🗑 O'chirish", callback_data=f"delete_{task_id}")]
+            [InlineKeyboardButton(text=get_text("btn_delete", language), callback_data=f"delete_{task_id}")]
         ]
     )
     return keyboard
 
-def day_navigation_keyboard(current_day: int):
+def day_navigation_keyboard(current_day: int, language: str = "uz"):
     """Kunlar bo'yicha navigatsiya"""
-    days = ["Dush", "Sesh", "Chor", "Pay", "Jum", "Shan", "Yak"]
+    days_keys = ["day_mon", "day_tue", "day_wed", "day_thu", "day_fri", "day_sat", "day_sun"]
     buttons = []
     
     row = []
-    for i, day in enumerate(days):
+    for i, day_key in enumerate(days_keys):
         emoji = "📍" if i == current_day else ""
+        day_text = get_text(day_key, language)
         row.append(InlineKeyboardButton(
-            text=f"{emoji}{day}", 
+            text=f"{emoji}{day_text}", 
             callback_data=f"day_{i}"
         ))
         if len(row) == 3:
@@ -105,7 +133,7 @@ def day_navigation_keyboard(current_day: int):
     if row:
         buttons.append(row)
     
-    buttons.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="back_to_menu")])
+    buttons.append([InlineKeyboardButton(text=get_text("btn_back", language), callback_data="back_to_menu")])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
@@ -138,34 +166,48 @@ def test_answer_keyboard(question_num: int):
     )
     return keyboard
 
-def yes_no_keyboard(action: str):
+def yes_no_keyboard(action: str, language: str = "uz"):
     """Ha/Yo'q klaviaturasi"""
+    yes_text = {"uz": "✅ Ha", "ru": "✅ Да", "en": "✅ Yes"}
+    no_text = {"uz": "❌ Yo'q", "ru": "❌ Нет", "en": "❌ No"}
+    
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Ha", callback_data=f"yes_{action}"),
-                InlineKeyboardButton(text="❌ Yo'q", callback_data=f"no_{action}")
+                InlineKeyboardButton(text=yes_text.get(language, yes_text["uz"]), callback_data=f"yes_{action}"),
+                InlineKeyboardButton(text=no_text.get(language, no_text["uz"]), callback_data=f"no_{action}")
             ]
         ]
     )
     return keyboard
 
-def settings_keyboard():
+def settings_keyboard(language: str = "uz"):
     """Sozlamalar menyusi"""
+    settings_texts = {
+        "work_hours": {"uz": "🕐 Ish vaqtini o'zgartirish", "ru": "🕐 Изменить рабочее время", "en": "🕐 Change work hours"},
+        "timezone": {"uz": "🌍 Vaqt mintaqasi", "ru": "🌍 Часовой пояс", "en": "🌍 Timezone"},
+        "camera": {"uz": "📸 Kamera sozlamalari", "ru": "📸 Настройки камеры", "en": "📸 Camera settings"},
+        "notifications": {"uz": "🔔 Bildirishnoma sozlamalari", "ru": "🔔 Настройки уведомлений", "en": "🔔 Notification settings"},
+        "language": {"uz": "🌐 Tilni o'zgartirish", "ru": "🌐 Изменить язык", "en": "🌐 Change language"}
+    }
+    
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🕐 Ish vaqtini o'zgartirish", callback_data="change_work_hours")],
-            [InlineKeyboardButton(text="🌍 Vaqt mintaqasi", callback_data="change_timezone")],
-            [InlineKeyboardButton(text="🔙 Orqaga", callback_data="back_to_menu")]
+            [InlineKeyboardButton(text=settings_texts["work_hours"].get(language, settings_texts["work_hours"]["uz"]), callback_data="change_work_hours")],
+            [InlineKeyboardButton(text=settings_texts["timezone"].get(language, settings_texts["timezone"]["uz"]), callback_data="change_timezone")],
+            [InlineKeyboardButton(text=settings_texts["camera"].get(language, settings_texts["camera"]["uz"]), callback_data="camera_settings")],
+            [InlineKeyboardButton(text=settings_texts["notifications"].get(language, settings_texts["notifications"]["uz"]), callback_data="notification_settings")],
+            [InlineKeyboardButton(text=settings_texts["language"].get(language, settings_texts["language"]["uz"]), callback_data="change_language")],
+            [InlineKeyboardButton(text=get_text("btn_back", language), callback_data="back_to_menu")]
         ]
     )
     return keyboard
 
-def back_to_main_keyboard():
+def back_to_main_keyboard(language: str = "uz"):
     """Asosiy menyuga qaytish"""
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🏠 Bosh menyu")]
+            [KeyboardButton(text=get_text("btn_back_menu", language))]
         ],
         resize_keyboard=True
     )

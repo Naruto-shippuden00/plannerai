@@ -504,6 +504,109 @@ async def update_work_hours(user_id: int, start_time: str, end_time: str):
         """, (start_time, end_time, user_id))
         await db.commit()
 
+async def get_user_language(user_id: int) -> str:
+    """
+    Foydalanuvchi tilini olish
+    
+    Returns:
+        Til kodi: 'uz', 'ru', 'en'
+        Default: 'uz'
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT language FROM users WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row and row['language']:
+                return row['language']
+            return 'uz'  # Default
+
+async def set_user_language(user_id: int, language: str):
+    """
+    Foydalanuvchi tilini o'rnatish
+    
+    Args:
+        user_id: Foydalanuvchi ID
+        language: Til kodi ('uz', 'ru', 'en')
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE users SET language = ? WHERE user_id = ?",
+            (language, user_id)
+        )
+        await db.commit()
+        logger.info(f"✅ Language set to '{language}' for user {user_id}")
+
+async def update_user_timezone(user_id: int, timezone: str):
+    """
+    Foydalanuvchi vaqt mintaqasini yangilash
+    
+    Args:
+        user_id: Foydalanuvchi ID
+        timezone: Vaqt mintaqasi (masalan: 'Asia/Tashkent')
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE users SET timezone = ? WHERE user_id = ?",
+            (timezone, user_id)
+        )
+        await db.commit()
+        logger.info(f"✅ Timezone set to '{timezone}' for user {user_id}")
+
+async def get_notification_settings(user_id: int) -> dict:
+    """
+    Bildirishnoma sozlamalarini olish
+    
+    Returns:
+        dict: {
+            'task_reminders': bool,
+            'morning_motivation': bool,
+            'weekly_reports': bool
+        }
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT notification_enabled, motivation_enabled FROM users WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return {
+                    'task_reminders': bool(row['notification_enabled']),
+                    'morning_motivation': bool(row['motivation_enabled']),
+                    'weekly_reports': True  # Default for now
+                }
+            return {
+                'task_reminders': True,
+                'morning_motivation': True,
+                'weekly_reports': True
+            }
+
+async def update_notification_settings(user_id: int, settings: dict):
+    """
+    Bildirishnoma sozlamalarini yangilash
+    
+    Args:
+        user_id: Foydalanuvchi ID
+        settings: Sozlamalar dict
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """UPDATE users 
+               SET notification_enabled = ?, motivation_enabled = ? 
+               WHERE user_id = ?""",
+            (
+                int(settings.get('task_reminders', True)),
+                int(settings.get('morning_motivation', True)),
+                user_id
+            )
+        )
+        await db.commit()
+        logger.info(f"✅ Notification settings updated for user {user_id}")
+
 async def migrate_existing_users():
     """Mavjud foydalanuvchilar uchun yangi ustunlarni qo'shish"""
     try:

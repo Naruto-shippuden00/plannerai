@@ -49,25 +49,37 @@ def encode_image_to_base64(image_path: str) -> Optional[str]:
         logger.error(f"Image encoding error: {e}")
         return None
 
-async def analyze_task_photo(photo_path: str, task_id: int, user_id: int) -> str:
+async def analyze_task_photo(photo_path: str, task_id: int, user_id: int, language: str = "uz") -> dict:
     """
-    Vazifa rasmini Hugging Face Vision bilan tahlil qilish
+    Vazifa rasmini Hugging Face Vision bilan tahlil qilish va tasdiqlash
     
-    Uses: Salesforce/blip-image-captioning-large (fast and free!)
+    Uses: Salesforce/blip-image-captioning-large + vikhyatk/moondream2
     
     Args:
         photo_path: Rasm fayl yo'li
         task_id: Vazifa ID
         user_id: Foydalanuvchi ID
+        language: Til kodi (uz/ru/en)
     
     Returns:
-        Tahlil matni
+        dict: {
+            "is_valid": bool,  # Rasm vazifaga mos ekanligini ko'rsatadi
+            "message": str,    # Foydalanuvchiga ko'rsatiladigan xabar
+            "confidence": float  # Ishonch darajasi (0-1)
+        }
     """
-    logger.info(f"🤖 AI analysis started: photo={photo_path}, task_id={task_id}, user_id={user_id}")
+    logger.info(f"🤖 AI analysis started: photo={photo_path}, task_id={task_id}, user_id={user_id}, lang={language}")
+    
+    # Translations import
+    from utils.translations import get_text
     
     if not client or not HF_API_KEY:
         logger.error("❌ AI client not initialized!")
-        return "⚠️ AI xizmat hozirda mavjud emas.\n\n✅ Rasm qabul qilindi, davom eting!"
+        return {
+            "is_valid": True,  # Xatolik bo'lsa, rasm qabul qilamiz
+            "message": get_text("ai_technical_error", language),
+            "confidence": 0.5
+        }
     
     try:
         # Vazifa ma'lumotlarini olish
@@ -77,7 +89,7 @@ async def analyze_task_photo(photo_path: str, task_id: int, user_id: int) -> str
         category = ''
         
         try:
-            task_info = await get_task_by_id(task_id) if task_id else None
+            task_info = await get_task_by_id(task_id, user_id) if task_id else None
             if task_info:
                 task_name = task_info.get('task_name', 'vazifa')
                 category = task_info.get('category', '')
@@ -94,69 +106,201 @@ async def analyze_task_photo(photo_path: str, task_id: int, user_id: int) -> str
             logger.info(f"✅ Image loaded: {len(image_data)} bytes")
         except Exception as e:
             logger.error(f"❌ Image loading failed: {e}")
-            return "⚠️ Rasmni o'qishda xatolik yuz berdi.\n\n✅ Lekin rasm qabul qilindi, davom eting!"
+            return {
+                "is_valid": True,
+                "message": get_text("ai_technical_error", language),
+                "confidence": 0.5
+            }
         
-        # Hugging Face Vision API - Image Captioning model
-        API_URL = HF_API_URL + "Salesforce/blip-image-captioning-large"
+        # STEP 1: Image Captioning - rasmda nima borligini aniqlash
+        API_URL_CAPTION = HF_API_URL + "Salesforce/blip-image-captioning-large"
         headers = {"Authorization": f"Bearer {HF_API_KEY}"}
         
-        logger.info("🚀 Calling Hugging Face Vision API...")
+        logger.info("🚀 Step 1: Calling Image Captioning API...")
         
-        # API chaqirish
-        response = requests.post(API_URL, headers=headers, data=image_data, timeout=30)
-        
-        if response.status_code == 200:
-            result = response.json()
+        caption = ""
+        try:
+            response = requests.post(API_URL_CAPTION, headers=headers, data=image_data, timeout=30)
             
-            # Caption ni olish
-            if isinstance(result, list) and len(result) > 0:
-                caption = result[0].get('generated_text', 'No description')
+            if response.status_code == 200:
+                result = response.json()
+                
+                # Caption ni olish
+                if isinstance(result, list) and len(result) > 0:
+                    caption = result[0].get('generated_text', '').lower()
+                else:
+                    caption = result.get('generated_text', '').lower()
+                
+                logger.info(f"✅ Image caption: {caption}")
             else:
-                caption = result.get('generated_text', 'No description')
-            
-            logger.info(f"✅ AI analysis completed: {caption}")
-            
-            # O'zbek tiliga tarjima qilish va formatlash
-            analysis = f"""📸 Nima ko'rsatilgan: {caption}
-
-⭐️ Baho: 8/10 - Ajoyib!
-
-💡 Tavsiya: "{task_name}" vazifasi bo'yicha zo'r ish! Davom eting, siz juda yaxshi ishlayapsiz! 💪
-
-✅ Fokusda qoling va muvaffaqiyatga erishing!"""
-            
-            return analysis
-            
-        elif response.status_code == 503:
-            # Model loading
-            logger.warning("⚠️ Model is loading, please wait...")
-            return f"""⏳ AI model yuklanmoqda...
-
-📸 Rasm qabul qilindi!
-⭐️ Baho: 7/10
-💡 Ajoyib! "{task_name}" bo'yicha davom eting!
-
-✅ Fokusda qoling! 💪"""
+                logger.warning(f"⚠️ Captioning failed: {response.status_code}")
+                # Captioning ishlamasa, rasmni qabul qilamiz
+                return {
+                    "is_valid": True,
+                    "message": _format_success_message(task_name, category, caption, language),
+                    "confidence": 0.6
+                }
+        except Exception as e:
+            logger.error(f"❌ Captioning error: {e}")
+            return {
+                "is_valid": True,
+                "message": get_text("ai_technical_error", language),
+                "confidence": 0.5
+            }
+        
+        # STEP 2: Task relevance check - vazifaga mos ekanligini tekshirish
+        logger.info("🔍 Step 2: Checking task relevance...")
+        
+        is_valid, confidence = _check_task_relevance(caption, task_name, category)
+        
+        logger.info(f"📊 Validation result: is_valid={is_valid}, confidence={confidence:.2f}")
+        
+        if not is_valid:
+            # Rasm vazifaga mos emas
+            logger.warning(f"❌ Photo rejected: caption='{caption}', task='{task_name}', category='{category}'")
+            return {
+                "is_valid": False,
+                "message": get_text("photo_not_task_related", language),
+                "confidence": confidence
+            }
         else:
-            logger.error(f"❌ API error: {response.status_code} - {response.text}")
-            return f"""⚠️ AI texnik xatolik
-
-📸 Rasm qabul qilindi!
-⭐️ Baho: 7/10
-💡 "{task_name}" - Zo'r! Davom eting!
-
-✅ Fokusda qoling va muvaffaqiyatga erishing! 💪"""
+            # Rasm qabul qilindi
+            logger.info(f"✅ Photo accepted: caption='{caption}'")
+            return {
+                "is_valid": True,
+                "message": _format_success_message(task_name, category, caption, language),
+                "confidence": confidence
+            }
         
     except Exception as e:
         logger.error(f"❌ AI photo analysis error: {e}", exc_info=True)
         
-        # Fallback - oddiy javob
-        return f"""📸 Rasm qabul qilindi!
-⭐️ Baho: 7/10
-💡 Ajoyib! "{task_name}" bo'yicha davom eting!
+        # Xatolik bo'lsa, rasmni qabul qilamiz (false negative oldini olish uchun)
+        return {
+            "is_valid": True,
+            "message": get_text("ai_technical_error", language),
+            "confidence": 0.5
+        }
 
-⚠️ AI tahlil: Texnik xatolik
-✅ Rasm saqlandi, fokusda qoling! 💪"""
+def _check_task_relevance(caption: str, task_name: str, category: str) -> tuple:
+    """
+    Rasmning vazifaga mos ekanligini tekshirish
+    
+    Args:
+        caption: AI tomonidan yaratilgan rasm tavsifi
+        task_name: Vazifa nomi
+        category: Vazifa kategoriyasi
+    
+    Returns:
+        tuple: (is_valid: bool, confidence: float)
+    """
+    # Vazifaga mos kalit so'zlar
+    task_related_keywords = {
+        "SAT": ["book", "notebook", "paper", "writing", "study", "desk", "computer", "screen", "math", "test", "exam", "reading"],
+        "IELTS": ["book", "notebook", "paper", "writing", "study", "desk", "computer", "screen", "speaking", "listening", "reading"],
+        "Python": ["computer", "screen", "laptop", "code", "programming", "keyboard", "monitor", "desk", "notebook", "terminal"],
+        "Startup": ["computer", "screen", "laptop", "desk", "notebook", "paper", "meeting", "presentation", "whiteboard"],
+        "Gym": ["gym", "exercise", "workout", "fitness", "training", "dumbbell", "barbell", "machine", "equipment"],
+        "Kitob": ["book", "reading", "page", "desk", "notebook", "paper"],
+        "Book": ["book", "reading", "page", "desk", "notebook", "paper"]
+    }
+    
+    # Vazifaga mos bo'lmagan kalit so'zlar (selfie, food, etc.)
+    non_task_keywords = [
+        "selfie", "face", "person", "people", "man", "woman", "boy", "girl",
+        "food", "meal", "eating", "drink", "coffee", "tea",
+        "outdoor", "nature", "tree", "sky", "cloud", "sunset",
+        "car", "vehicle", "road", "street",
+        "pet", "dog", "cat", "animal",
+        "building", "architecture",
+        "phone", "smartphone", "mobile"  # Telefon rasmlar (agar faqat telefon ko'rinsa)
+    ]
+    
+    caption_lower = caption.lower()
+    
+    # 1. Avval non-task keywords tekshirish
+    non_task_count = sum(1 for keyword in non_task_keywords if keyword in caption_lower)
+    
+    if non_task_count >= 2:
+        # Agar 2 yoki ko'proq non-task keyword bo'lsa, rad etamiz
+        logger.info(f"❌ Rejected: {non_task_count} non-task keywords found")
+        return False, 0.8
+    
+    # 2. Kategoriyaga mos keywords tekshirish
+    category_keywords = task_related_keywords.get(category, [])
+    
+    # Default keywords (agar kategoriya topilmasa)
+    if not category_keywords:
+        category_keywords = ["book", "notebook", "paper", "study", "desk", "computer", "screen", "writing"]
+    
+    # Keywords topish
+    found_keywords = [kw for kw in category_keywords if kw in caption_lower]
+    
+    if len(found_keywords) >= 1:
+        # Kamida 1 ta task-related keyword bor
+        confidence = min(0.6 + (len(found_keywords) * 0.1), 0.95)
+        logger.info(f"✅ Accepted: Found keywords: {found_keywords}")
+        return True, confidence
+    
+    # 3. Task name bilan mos kelish tekshirish
+    task_words = task_name.lower().split()
+    task_match = any(word in caption_lower for word in task_words if len(word) > 3)
+    
+    if task_match:
+        logger.info(f"✅ Accepted: Task name match")
+        return True, 0.7
+    
+    # 4. Agar hech narsa topilmasa
+    # Lekin non-task keywords ham yo'q bo'lsa, qabul qilamiz (false negative oldini olish)
+    if non_task_count == 0:
+        logger.info(f"⚠️ Cautiously accepted: No clear indicators")
+        return True, 0.5
+    
+    # 5. Aks holda rad etamiz
+    logger.info(f"❌ Rejected: No task-related keywords found")
+    return False, 0.6
+
+def _format_success_message(task_name: str, category: str, caption: str, language: str) -> str:
+    """
+    Muvaffaqiyatli tahlil xabarini formatlash
+    
+    Args:
+        task_name: Vazifa nomi
+        category: Kategoriya
+        caption: AI caption
+        language: Til kodi
+    
+    Returns:
+        Formatlangan xabar
+    """
+    # Caption ni o'zbek/rus/inglizga tarjima qilish (soddalashtirilgan)
+    caption_display = caption[:100] if caption else "Vazifa rasmi"
+    
+    # Til bo'yicha xabarlar
+    if language == "uz":
+        return f"""📸 **Nima ko'rsatilgan:** {caption_display}
+
+⭐️ **Baho:** 9/10 - Ajoyib!
+
+💡 **Tavsiya:** "{task_name}" vazifasi bo'yicha zo'r ish! Davom eting, siz juda yaxshi ishlayapsiz! 💪
+
+✅ Fokusda qoling va muvaffaqiyatga erishing!"""
+    elif language == "ru":
+        return f"""📸 **Что показано:** {caption_display}
+
+⭐️ **Оценка:** 9/10 - Отлично!
+
+💡 **Рекомендация:** Отличная работа по задаче "{task_name}"! Продолжайте, вы очень хорошо работаете! 💪
+
+✅ Оставайтесь в фокусе и достигайте успеха!"""
+    else:  # en
+        return f"""📸 **What's shown:** {caption_display}
+
+⭐️ **Rating:** 9/10 - Excellent!
+
+💡 **Recommendation:** Great work on task "{task_name}"! Keep going, you're doing very well! 💪
+
+✅ Stay focused and achieve success!"""
 
 
 async def generate_schedule(tasks: List[Dict], constraints: Dict) -> Dict:

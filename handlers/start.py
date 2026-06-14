@@ -2,13 +2,14 @@
 Start va asosiy komandalar
 """
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from utils.database import add_user
-from utils.keyboards import main_menu_keyboard
+from utils.database import add_user, get_user_language, set_user_language
+from utils.keyboards import main_menu_keyboard, language_selection_keyboard
+from utils.translations import get_text
 
 router = Router()
 
@@ -18,90 +19,80 @@ class UserState(StatesGroup):
     waiting_for_duration = State()
     waiting_for_photo = State()
     waiting_for_test_answer = State()
+    selecting_language = State()
 
 @router.message(CommandStart())
-async def cmd_start(message: Message):
-    """Start komandasi"""
+async def cmd_start(message: Message, state: FSMContext):
+    """Start komandasi - Til tanlash"""
     user = message.from_user
     await add_user(user.id, user.username or "", user.full_name or "")
     
-    welcome_text = f"""
-👋 Assalomu alaykum, {user.first_name}!
+    # Foydalanuvchi tilini tekshirish
+    user_lang = await get_user_language(user.id)
+    
+    # Agar til tanlanmagan bo'lsa, til tanlashni so'rash
+    if not user_lang or user_lang == 'uz':  # Default uz bo'lgani uchun qayta so'raymiz
+        await show_language_selection(message)
+    else:
+        await show_welcome_message(message, user_lang)
 
-Men sizning shaxsiy **Productivity Assistant** botingizman! 🚀
+async def show_language_selection(message: Message):
+    """Til tanlash menyusini ko'rsatish"""
+    keyboard = language_selection_keyboard()
+    
+    await message.answer(
+        "🌍 **Select your language / Выберите язык / Tilni tanlang**\n\n"
+        "Choose your preferred language for the bot interface:",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
 
-📌 **Nima qila olaman:**
-
-🤖 **AI Planner** - Sizning vazifalaringizni olib, optimal haftalik jadval tuzaman
-
-⏰ **Smart Reminders** - Har bir vazifa vaqtida eslatma beraman va tekshirish uchun rasm so'rayman
-
-📊 **Progress Tracking** - Kunlik va haftalik progressingizni kuzataman
-
-✅ **Weekly Tests** - Har shanba kuni o'rganganlaringiz bo'yicha test, yakshanba kuni natijalar
-
-💪 **Motivation** - Sizni doimo motivatsiya qilaman va qo'llab-quvvatlayman!
-
----
-
-🎯 **Hozir nima qilish kerak:**
-
-1️⃣ Vazifalaringizni qo'shing (➕ Vazifa qo'shish)
-2️⃣ AI bilan jadval tuzing (🤖 AI Jadval)
-3️⃣ Jadvalingizga amal qiling!
-
-Men sizga eslatmalar yuboraman va natijalarni kuzataman. 
-
-**Tayyor bo'lsangiz, pastdagi tugmalardan foydalaning!** 👇
-"""
+async def show_welcome_message(message: Message, language: str):
+    """Welcome xabarini ko'rsatish"""
+    user = message.from_user
+    welcome_text = get_text("welcome", language, name=user.first_name)
     
     await message.answer(
         welcome_text,
-        reply_markup=main_menu_keyboard()
+        reply_markup=main_menu_keyboard(language),
+        parse_mode="Markdown"
     )
 
+@router.callback_query(F.data.startswith("lang_"))
+async def select_language(callback: CallbackQuery):
+    """Til tanlash callback"""
+    language = callback.data.split("_")[1]  # lang_uz -> uz
+    user_id = callback.from_user.id
+    
+    # Tilni saqlash
+    await set_user_language(user_id, language)
+    
+    # Welcome xabarini ko'rsatish
+    await callback.message.delete()
+    
+    welcome_text = get_text("welcome", language, name=callback.from_user.first_name)
+    
+    await callback.message.answer(
+        welcome_text,
+        reply_markup=main_menu_keyboard(language),
+        parse_mode="Markdown"
+    )
+    
+    await callback.answer(get_text("language_changed", language))
+
+@router.message(Command("language"))
+async def cmd_language(message: Message):
+    """Tilni o'zgartirish komandasi"""
+    await show_language_selection(message)
+
 @router.message(Command("help"))
-@router.message(F.text == "❓ Yordam")
+@router.message(F.text.in_(["❓ Yordam", "❓ Помощь", "❓ Help"]))
 async def cmd_help(message: Message):
     """Yordam komandasi"""
-    help_text = """
-📚 **Bot qanday ishlaydi:**
-
-**1. Vazifalar qo'shish:**
-- "➕ Vazifa qo'shish" tugmasini bosing
-- Vazifa nomini kiriting (masalan: "SAT Math practice")
-- Kategoriyani tanlang (SAT, Python, Kitob va h.k.)
-- Prioritet va davomiylikni belgilang
-
-**2. AI Jadval tuzish:**
-- "🤖 AI Jadval" tugmasini bosing
-- AI sizning vazifalaringizni tahlil qilib, optimal jadval tuzadi
-- Texnikum vaqtingiz (8:00-16:00) avtomatik hisobga olinadi
-- Jadvalni tasdiqlang
-
-**3. Eslatmalar:**
-- Vazifa vaqti kelganda sizga eslatma yuboriladi
-- Vazifani bajargandan keyin rasm yuboring
-- Rasm sizning progressingizni tasdiqlaydi
-
-**4. Statistika:**
-- Kunlik va haftalik progressingizni ko'ring
-- Qaysi vazifalarni ko'proq bajaryapsiz
-- O'z-o'zingizni taqqoslang
-
-**5. Haftalik test:**
-- Shanba kuni: o'rganganlaringiz bo'yicha test
-- Yakshanba kuni: haftalik natijalar va tahlil
-
-**Qo'shimcha buyruqlar:**
-/stats - Statistika
-/schedule - Bugungi jadval
-/reset - Jadvalni qayta tuzish
-
-❓ Savollar bo'lsa, bemalol yozing!
-"""
+    user_lang = await get_user_language(message.from_user.id)
+    help_text = get_text("help_text", user_lang)
     
-    await message.answer(help_text)
+    await message.answer(help_text, parse_mode="Markdown")
 
 @router.message(Command("id"))
 async def cmd_id(message: Message):
@@ -125,12 +116,20 @@ async def back_to_menu(callback: CallbackQuery):
     )
     await callback.answer()
 
-@router.message(F.text == "🏠 Bosh menyu")
+@router.message(F.text.in_(["🏠 Bosh menyu", "🏠 Главное меню", "🏠 Main Menu"]))
 async def back_to_main(message: Message, state: FSMContext):
     """Bosh menyuga qaytish"""
     await state.clear()  # Barcha state'larni tozalash
+    user_lang = await get_user_language(message.from_user.id)
+    
+    back_text = {
+        "uz": "🏠 Bosh menyu\n\nQuyidagi tugmalardan birini tanlang:",
+        "ru": "🏠 Главное меню\n\nВыберите одну из кнопок ниже:",
+        "en": "🏠 Main Menu\n\nSelect one of the buttons below:"
+    }
+    
     await message.answer(
-        "🏠 Bosh menyu\n\nQuyidagi tugmalardan birini tanlang:",
-        reply_markup=main_menu_keyboard()
+        back_text.get(user_lang, back_text["uz"]),
+        reply_markup=main_menu_keyboard(user_lang)
     )
 
