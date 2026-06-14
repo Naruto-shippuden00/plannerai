@@ -404,6 +404,54 @@ async def wrong_content_during_focus(message: Message):
         "📸 Vazifangizni bajarayotganingizni tasdiqlovchi rasm yuboring!"
     )
 
+@router.message(F.photo)
+async def handle_any_photo(message: Message, state: FSMContext):
+    """
+    Har qanday rasm - FSM state bo'lmasa ham qabul qilish
+    """
+    user_id = message.from_user.id
+    
+    logger.info(f"📸 Photo received from user {user_id} (any state)")
+    
+    # Hozirgi state'ni tekshirish
+    current_state = await state.get_state()
+    logger.info(f"📊 Current FSM state: {current_state}")
+    
+    # Agar waiting_for_photo state'da bo'lsa, asosiy handler ishlaydi
+    if current_state == FocusState.waiting_for_photo.state:
+        logger.info("✅ State is correct, main handler will process")
+        # Asosiy handler (receive_focus_photo) ishlab beradi
+        return
+    
+    # Agar state to'g'ri emas, lekin aktiv session bor - rasm qabul qilamiz
+    active_session = await get_active_focus_session(user_id)
+    
+    if not active_session:
+        logger.info("ℹ️ No active session, informing user")
+        await message.answer(
+            "📸 Rasm qabul qilindi!\n\n"
+            "❓ Lekin hozirda aktiv vazifa yo'q.\n\n"
+            "Vazifa boshlash uchun:\n"
+            "1️⃣ /test_reminder - Test bildirishnoma\n"
+            "2️⃣ Yoki jadvalingizdan vazifa boshlang\n\n"
+            "💡 Rasm yuborish faqat vazifa davomida kerak.",
+            parse_mode="Markdown"
+        )
+        return
+    
+    # Aktiv session bor - state'ni to'g'rilaymiz va rasmni qabul qilamiz
+    logger.info(f"🔄 Active session found: {active_session['id']}, fixing state")
+    
+    await state.set_state(FocusState.waiting_for_photo)
+    await state.update_data(
+        session_id=active_session['id'],
+        task_id=active_session.get('task_id'),
+        task_name=active_session.get('task_name', 'Unknown')
+    )
+    
+    # Endi asosiy handler chaqiramiz
+    await receive_focus_photo(message, state)
+
 async def start_pomodoro_session(bot, user_id: int, session_data: dict):
     """
     Pomodoro timer - planned_duration focus + har 15 daqiqada nazorat
