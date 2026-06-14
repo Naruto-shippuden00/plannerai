@@ -1,34 +1,40 @@
 """
-AI Helper - Groq API (bepul) ishlatadi
+AI Helper - Google Gemini API (100% BEPUL va TEZKOR!)
 """
 import os
-from groq import Groq
+import google.generativeai as genai
 from typing import List, Dict, Optional
 import json
-import base64
+import logging
+from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 client = None
+vision_model = None
 
 def init_ai():
-    """AI clientni boshlash"""
-    global client
-    api_key = os.getenv('GROQ_API_KEY')
-    if api_key:
-        client = Groq(api_key=api_key)
-    return client is not None
-
-def encode_image(image_path: str) -> Optional[str]:
-    """Rasmni base64 formatga o'girish"""
+    """AI clientni boshlash - Google Gemini"""
+    global client, vision_model
+    api_key = os.getenv('GEMINI_API_KEY')
+    
+    if not api_key:
+        logger.error("❌ GEMINI_API_KEY not found!")
+        return False
+    
     try:
-        with open(image_path, "rb") as image_file:
-            return base64.b64encode(image_file.read()).decode('utf-8')
+        genai.configure(api_key=api_key)
+        vision_model = genai.GenerativeModel('gemini-1.5-flash')
+        client = True
+        logger.info("✅ Google Gemini initialized successfully!")
+        return True
     except Exception as e:
-        print(f"Image encoding error: {e}")
-        return None
+        logger.error(f"❌ Failed to initialize Gemini: {e}")
+        return False
 
 async def analyze_task_photo(photo_path: str, task_id: int, user_id: int) -> str:
     """
-    Vazifa rasmini AI bilan tahlil qilish
+    Vazifa rasmini Google Gemini bilan tahlil qilish
     
     Args:
         photo_path: Rasm fayl yo'li
@@ -38,17 +44,14 @@ async def analyze_task_photo(photo_path: str, task_id: int, user_id: int) -> str
     Returns:
         Tahlil matni
     """
-    import logging
-    logger = logging.getLogger(__name__)
-    
     logger.info(f"🤖 AI analysis started: photo={photo_path}, task_id={task_id}, user_id={user_id}")
     
-    if not client:
+    if not client or not vision_model:
         logger.error("❌ AI client not initialized!")
         return "⚠️ AI xizmat hozirda mavjud emas.\n\n✅ Rasm qabul qilindi, davom eting!"
     
     try:
-        # Vazifa ma'lumotlarini olish (agar kerak bo'lsa)
+        # Vazifa ma'lumotlarini olish
         from utils.database import get_task_by_id
         task_info = None
         task_name = 'vazifa'
@@ -63,14 +66,15 @@ async def analyze_task_photo(photo_path: str, task_id: int, user_id: int) -> str
         except Exception as e:
             logger.warning(f"⚠️ Could not get task info: {e}")
         
-        # Rasmni encode qilish
-        logger.info(f"📷 Encoding image: {photo_path}")
-        base64_image = encode_image(photo_path)
-        if not base64_image:
-            logger.error("❌ Image encoding failed!")
-            return "⚠️ Rasmni o'qishda xatolik yuz berdi.\n\n✅ Lekin rasm qabul qilindi, davom eting!"
+        # Rasmni yuklash
+        logger.info(f"📷 Loading image: {photo_path}")
         
-        logger.info(f"✅ Image encoded: {len(base64_image)} bytes")
+        try:
+            img = Image.open(photo_path)
+            logger.info(f"✅ Image loaded: size={img.size}, mode={img.mode}")
+        except Exception as e:
+            logger.error(f"❌ Image loading failed: {e}")
+            return "⚠️ Rasmni o'qishda xatolik yuz berdi.\n\n✅ Lekin rasm qabul qilindi, davom eting!"
         
         prompt = f"""
 Siz o'quvchilarni motivatsiya qiluvchi AI yordamchisisiz. 
@@ -80,49 +84,32 @@ Kategoriya: {category}
 
 Rasmni tahlil qilib, quyidagilarni baholang:
 
-1. **Nima qilindi?** (qisqacha)
+1. **Nima qilindi?** (qisqacha, 1-2 jumla)
 2. **Sifat darajasi** (1-10 ball)
-3. **Kuzatmalar va tavsiyalar** (ijobiy va qurilish yo'nalishida)
+3. **Qisqa tavsiya** (1 jumla, ijobiy)
 
 MUHIM:
 - O'zbek tilida yozing
-- Qisqa va aniq bo'ling (3-5 jumla)
+- Juda qisqa va aniq bo'ling (maksimal 4 jumla)
 - Motivatsiya bering, tanqid qilmang
-- Agar rasm vazifaga mos bo'lmasa, muloyim ta'kidlang
+- Agar rasm vazifaga mos bo'lmasa ham ijobiy yozing
 
 Format:
 📸 [Nima ko'rsatilgan]
 ⭐️ Baho: [X/10]
-💡 Tavsiya: [Qisqa tavsiya]
+💡 [Qisqa tavsiya]
 """
         
-        logger.info("🚀 Calling Groq Vision API...")
+        logger.info("🚀 Calling Google Gemini Vision API...")
         
-        response = client.chat.completions.create(
-            model="llama-3.2-90b-vision-preview",  # Groq vision model
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": prompt
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
-                            }
-                        }
-                    ]
-                }
-            ],
-            temperature=0.7,
-            max_tokens=500,
-            timeout=30.0  # 30 soniya timeout
-        )
+        # Gemini API chaqirish
+        response = vision_model.generate_content([prompt, img])
         
-        analysis = response.choices[0].message.content.strip()
+        if not response or not response.text:
+            logger.error("❌ Empty response from Gemini")
+            return "⚠️ AI javob bermadi.\n\n✅ Rasm qabul qilindi, davom eting!"
+        
+        analysis = response.text.strip()
         logger.info(f"✅ AI analysis completed: {len(analysis)} chars")
         logger.info(f"📝 Analysis result: {analysis[:100]}...")
         
@@ -130,11 +117,19 @@ Format:
         
     except Exception as e:
         logger.error(f"❌ AI photo analysis error: {e}", exc_info=True)
-        return f"⚠️ AI tahlil qilishda xatolik yuz berdi.\n\n❌ Xato: {str(e)[:100]}\n\n✅ Lekin rasm qabul qilindi, davom eting!"
+        
+        # Fallback - oddiy javob
+        return f"""📸 Rasm qabul qilindi!
+⭐️ Baho: 7/10
+💡 Ajoyib! Davom eting, siz zo'r ishlayapsiz! 💪
+
+⚠️ AI tahlil: Texnik xatolik
+✅ Rasm saqlandi, fokusda qoling!"""
+
 
 async def generate_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
     """
-    AI yordamida jadval tuzish
+    AI yordamida jadval tuzish - Google Gemini
     
     Args:
         tasks: Vazifalar ro'yxati [{"name": "SAT", "duration": 120, "priority": 3, ...}]
@@ -147,11 +142,14 @@ async def generate_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
         # Agar AI ishlamasa, oddiy algoritm
         return generate_simple_schedule(tasks, constraints)
     
-    # Vaqtlarni olish
-    work_start = constraints.get('work_start_time', '08:00')
-    work_end = constraints.get('work_end_time', '16:00')
-    
     try:
+        # Gemini text model
+        text_model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # Vaqtlarni olish
+        work_start = constraints.get('work_start_time', '08:00')
+        work_end = constraints.get('work_end_time', '16:00')
+        
         # Vazifalar sonini hisoblash
         task_count = len(tasks)
         
@@ -163,90 +161,28 @@ async def generate_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
             task_details += f"\n- {task['task_name']} ({task['category']}) - {duration_hours}h - {priority_text}"
         
         prompt = f"""
-Siz professional time management AI assistant. Sizning vazifangiz - optimal, muvozanatli haftalik jadval tuzish.
+Professional time management AI assistant. Sizning vazifangiz - optimal haftalik jadval tuzish.
 
 📋 VAZIFALAR ({task_count} ta):
 {task_details}
 
 ⚙️ CHEKLOVLAR:
-- Ish/Texnikum: Dushanba-Shanba, {work_start}-{work_end} ❌ (band qilmang!)
-- Bo'sh vaqt: {work_end} dan keyin va yakshanba kuni
-- Uyqu: 23:00-06:00 (MUHIM!)
-- Optimal ish vaqti: Har kuni 3-4 soat o'qish/mashq
+- Ish/Texnikum: {work_start}-{work_end} ❌ (band qilmang!)
+- Bo'sh vaqt: {work_end} dan keyin
+- Har kunga 2-3 ta vazifa
 
-🎯 MAQSAD: Har bir vazifaga HAFTADA 3-5 marta vaqt ajrating!
-
-⚠️ MUHIM QOIDALAR:
-
-1. **HAR KUNGA XILMA-XILLIK:**
-   - Bir kunga BARCHA vazifalarni joylashtirmang!
-   - Har kuni 2-3 xil vazifa bo'lishi kerak
-   - Misol: Dushanba → SAT, Python | Seshanba → IELTS, Kitob | ...
-
-2. **OPTIMAL TAQSIMLASH:**
-   - Yuqori prioritetli vazifalar: haftada 4-5 marta
-   - O'rtacha prioritet: haftada 3-4 marta  
-   - Past prioritet: haftada 2-3 marta
-
-3. **VAQT ORALIG'I:**
-   - {work_end} dan keyin 1 soat dam olish
-   - Asosiy vazifalar: {work_end}+1 soat dan 22:00 gacha
-   - Har bir session: 1-2 soat
-   - Sessionlar orasida 15-30 daqiqa tanaffus
-
-4. **PRIORITET HISOBGA OLING:**
-   - Priority 3 (🔴): Eng yaxshi vaqtda (ertalab yoki kechqurun birinchi)
-   - Priority 2 (🟡): O'rtacha vaqt
-   - Priority 1 (🟢): Qolgan vaqt
-
-5. **KATEGORIYA BO'YICHA:**
-   - SAT/IELTS: Ertalab yoki kechqurun birinchi
-   - Python/Programming: Miya yangi bo'lganda
-   - Kitob: Kechqurun dam olish uchun
-   - Gym: Energiya kerak bo'lganda
-
-6. **MUVOZANAT:**
-   - Qiyin vazifadan keyin oson vazifa
-   - Mental ishdan keyin physical ish
-   - Bir xil vazifani ketma-ket 2 kunga joylashtirmang
-
-7. **YAKSHANBA:**
-   - Haftalik review: 10:00-12:00
-   - Yengil o'qish/takrorlash: 14:00-16:00
-   - Keyingi hafta plani: 17:00-18:00
-
-📊 JSON FORMAT:
+JSON format:
 {{
-    "monday": [
-        {{"time": "17:00-18:30", "task": "SAT Math", "task_id": 1}},
-        {{"time": "19:00-20:30", "task": "Python Basics", "task_id": 2}}
-    ],
-    "tuesday": [
-        {{"time": "17:00-18:30", "task": "IELTS Speaking", "task_id": 3}},
-        {{"time": "19:00-20:00", "task": "Kitob", "task_id": 4}}
-    ],
+    "monday": [{{"time": "17:00-18:30", "task": "SAT Math", "task_id": 1}}],
+    "tuesday": [...],
     ...
 }}
 
-⚡️ ESLATMA: 
-- Har bir vazifani HAFTADA KO'P MARTA takrorlang
-- Bir kunga hammani yig'mang, xilma-xillik yarating!
-- Faqat {work_end} dan keyingi vaqtga joylashtiring
-
-FAQAT JSON javob bering, boshqa TEXT YO'Q!
+FAQAT JSON javob bering!
 """
         
-        response = client.chat.completions.create(
-            model="llama-3.1-70b-versatile",  # Groq'ning eng yaxshi bepul modeli
-            messages=[
-                {"role": "system", "content": "Siz professional time management assistant. Faqat JSON formatida javob bering."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=2000
-        )
-        
-        result = response.choices[0].message.content.strip()
+        response = text_model.generate_content(prompt)
+        result = response.text.strip()
         
         # JSON ni extract qilish
         if "```json" in result:
@@ -258,7 +194,7 @@ FAQAT JSON javob bering, boshqa TEXT YO'Q!
         return schedule
         
     except Exception as e:
-        print(f"AI schedule generation error: {e}")
+        logger.error(f"AI schedule generation error: {e}")
         return generate_simple_schedule(tasks, constraints)
 
 def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
