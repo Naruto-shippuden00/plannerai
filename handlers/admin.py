@@ -228,3 +228,147 @@ async def test_reminder_command(message: Message):
         parse_mode="Markdown"
     )
 
+# ============== TEST MODE SYSTEM ==============
+
+# Test mode tracking
+test_mode_users = {}  # {user_id: {'enabled': bool, 'started_at': datetime}}
+
+@router.message(Command("testmode"))
+async def toggle_test_mode(message: Message):
+    """Test rejimini yoqish/o'chirish (Faqat admin)"""
+    if not is_admin(message.from_user.id):
+        await message.answer("❌ Bu komanda faqat admin uchun!")
+        return
+    
+    user_id = message.from_user.id
+    
+    # Test mode holatini aniqlash
+    if user_id in test_mode_users and test_mode_users[user_id]['enabled']:
+        # Test mode'ni o'chirish
+        test_mode_users[user_id]['enabled'] = False
+        
+        await message.answer(
+            "🔴 **TEST REJIMI O'CHIRILDI**\n\n"
+            "✅ Bot endi normal rejimda ishlaydi:\n\n"
+            "⏰ Bildirishnoma intervali: 5 daqiqa\n"
+            "⏱ Pomodoro davomiyligi: Jadval bo'yicha\n"
+            "🔔 Tanaffus: 10 daqiqa\n\n"
+            "🚀 Bot endi ommaga taqdim qilish uchun tayyor!",
+            parse_mode="Markdown",
+            reply_markup=main_menu_keyboard()
+        )
+    else:
+        # Test mode'ni yoqish
+        test_mode_users[user_id] = {
+            'enabled': True,
+            'started_at': datetime.now()
+        }
+        
+        await message.answer(
+            "🟢 **TEST REJIMI YOQILDI**\n\n"
+            "✅ Tizim tezlashtirilgan rejimda ishlaydi:\n\n"
+            "⏰ Bildirishnoma intervali: 30 soniya (5 daqiqa o'rniga)\n"
+            "⏱ Pomodoro davomiyligi: 2 daqiqa (test uchun)\n"
+            "🔔 Tanaffus: 30 soniya (10 daqiqa o'rniga)\n\n"
+            "🧪 **TEST JARAYONI:**\n\n"
+            "1️⃣ /test_reminder - Bildirishnoma yuborish\n"
+            "2️⃣ Har 30 soniyada yangi bildirishnoma keladi\n"
+            "3️⃣ 📸 Rasm yuboring - bildirishnoma to'xtaydi\n"
+            "4️⃣ 🤖 AI rasm tahlil qiladi\n"
+            "5️⃣ ⏱ Avtomatik 2 daqiqalik timer boshlanadi\n"
+            "6️⃣ ⏰ 2 daqiqadan keyin tanaffus (30 soniya)\n"
+            "7️⃣ 🔁 Keyingi vazifa (agar mavjud bo'lsa)\n\n"
+            "⚠️ Test rejimini o'chirish: /testmode\n\n"
+            "💡 **MUHIM:** Testdan keyin albatta o'chiring!",
+            parse_mode="Markdown",
+            reply_markup=main_menu_keyboard()
+        )
+
+def is_test_mode(user_id: int) -> bool:
+    """
+    Test rejimini tekshirish
+    
+    Returns:
+        bool: True agar test rejim yoqilgan bo'lsa
+    """
+    if user_id in test_mode_users:
+        return test_mode_users[user_id].get('enabled', False)
+    return False
+
+def get_notification_interval(user_id: int) -> int:
+    """
+    Bildirishnoma intervalini olish (sekundlarda)
+    
+    Args:
+        user_id: Foydalanuvchi ID
+    
+    Returns:
+        int: Interval sekundlarda (test: 30, normal: 300)
+    """
+    if is_test_mode(user_id):
+        return 30  # 30 soniya
+    return 300  # 5 daqiqa
+
+def get_pomodoro_duration(user_id: int, planned_duration: int) -> int:
+    """
+    Pomodoro davomiyligini olish (daqiqalarda)
+    
+    Args:
+        user_id: Foydalanuvchi ID
+        planned_duration: Rejalashtirilgan davomiylik
+    
+    Returns:
+        int: Davomiylik daqiqalarda (test: 2, normal: planned)
+    """
+    if is_test_mode(user_id):
+        return 2  # 2 daqiqa
+    return planned_duration
+
+def get_break_duration(user_id: int) -> int:
+    """
+    Tanaffus davomiyligini olish (sekundlarda)
+    
+    Args:
+        user_id: Foydalanuvchi ID
+    
+    Returns:
+        int: Davomiylik sekundlarda (test: 30, normal: 600)
+    """
+    if is_test_mode(user_id):
+        return 30  # 30 soniya
+    return 600  # 10 daqiqa
+
+@router.message(Command("teststatus"))
+async def test_mode_status(message: Message):
+    """Test rejimi holatini ko'rsatish"""
+    if not is_admin(message.from_user.id):
+        await message.answer("❌ Bu komanda faqat admin uchun!")
+        return
+    
+    user_id = message.from_user.id
+    
+    if is_test_mode(user_id):
+        started = test_mode_users[user_id]['started_at']
+        duration = datetime.now() - started
+        hours = int(duration.total_seconds() // 3600)
+        minutes = int((duration.total_seconds() % 3600) // 60)
+        
+        await message.answer(
+            f"🟢 **TEST REJIMI YOQILGAN**\n\n"
+            f"📅 Boshlangan: {started.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"⏱ Davomiyligi: {hours}s {minutes}d\n\n"
+            f"⚙️ **Sozlamalar:**\n"
+            f"• Bildirishnoma: 30 soniya\n"
+            f"• Pomodoro: 2 daqiqa\n"
+            f"• Tanaffus: 30 soniya\n\n"
+            f"O'chirish: /testmode",
+            parse_mode="Markdown"
+        )
+    else:
+        await message.answer(
+            "🔴 **TEST REJIMI O'CHIRILGAN**\n\n"
+            "Bot normal rejimda ishlayapti.\n\n"
+            "Yoqish: /testmode",
+            parse_mode="Markdown"
+        )
+

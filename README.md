@@ -25,7 +25,13 @@
 ### 🎯 Focus Mode (YANGI!)
 - **Cheksiz bildirishnomalar**: Vazifa vaqti kelganda har 5 minutda eslatma
 - **Rasm orqali tasdiqlash**: Faqat rasm yuborish bilan bildirishnoma to'xtaydi
-- **Pomodoro Timer**: 1 soat fokus + 10 daqiqa tanaffus + avtomatik davom etish
+- **🤖 AI Vision Integration**: Yuborilgan rasmlarni avtomatik tahlil qilish
+  - Groq Vision API bilan powered
+  - Vazifa mos kelishini tekshirish
+  - Sifat darajasini baholash (1-10)
+  - O'zbek tilida konstruktiv tavsiyalar
+- **Pomodoro Timer**: Rasm yuborilgandan keyin AVTOMATIK timer boshlanadi
+- **Smart Duration**: Jadval bo'yicha fokus + 10 daqiqa tanaffus + avtomatik davom etish
 - **Nazorat tizimi**: Har 15 daqiqada fokus tekshiruvi
 - **Kamera integratsiyasi**: Foydalanuvchi ruxsati bilan tasodifiy rasm so'rash
 
@@ -221,15 +227,27 @@ python bot.py
 2. **CHEKSIZ BILDIRISHNOMALAR BOSHLANADI!** (har 5 minutda)
 3. Bildirishnomani to'xtatish uchun:
    - 📸 Vazifa rasmini yuboring (kitob, dars, mashq daftari va h.k.)
-   - Rasm yuborilgandan keyin bildirishnomalar to'xtaydi
-4. **POMODORO TIMER BOSHLANDI!**
-   - 1 soat fokusda ishlaysiz
+   - 🤖 **AI RASM TAHLIL QILADI**:
+     - Nima ko'rsatilgan
+     - Vazifaga mos kelishi
+     - Sifat darajasi (1-10 ball)
+     - Tavsiyalar va motivatsiya
+   - ✅ Rasm tasdiqlangandan keyin bildirishnomalar to'xtaydi
+4. **⏱ POMODORO TIMER AVTOMATIK BOSHLANDI!**
+   - Jadval bo'yicha fokusda ishlaysiz (masalan, 60 daqiqa)
    - Har 15 daqiqada motivatsiya xabarlari
    - Kamera ruxsati bo'lsa, tasodifiy rasm so'raladi
-5. 1 soatdan keyin 10 daqiqa tanaffus
+5. Timer tugagandan keyin 10 daqiqa tanaffus
 6. Keyingi vazifaga avtomatik o'tish
 
 **MUHIM:** Agar rasm yubormasangiz, bildirishnomalar to'xtamaydi va jazo olasiz!
+
+**AI VISION MISOL:**
+```
+📸 Nima ko'rsatilgan: SAT Math mashq daftari, algebraik tenglamalar
+⭐️ Baho: 8/10
+💡 Tavsiya: Ajoyib! Yozuv aniq va tartibli. Davom eting!
+```
 
 #### 4. Jazolarni boshqarish
 
@@ -430,22 +448,57 @@ Savollar yoki muammolar bo'lsa:
 
 ---
 
+## 🧪 Test Mode (Admin)
+
+Botni tezroq sinash uchun test rejimi:
+
+```bash
+# Test rejimini yoqish (faqat admin)
+/testmode
+
+# Test bildirishnoma yuborish
+/test_reminder
+
+# Rasm yuborish va tizimni kuzatish
+# (30 soniya interval, 2 daqiqa timer, 30 soniya tanaffus)
+
+# Test rejimini o'chirish
+/testmode
+```
+
+**Test Mode sozlamalari:**
+- ⏰ Bildirishnoma: 30 soniya (normal: 5 daqiqa)
+- ⏱ Pomodoro: 2 daqiqa (normal: jadval bo'yicha)
+- 🔔 Tanaffus: 30 soniya (normal: 10 daqiqa)
+
+📄 To'liq qo'llanma: [TEST_MODE_GUIDE.md](TEST_MODE_GUIDE.md)
+
+---
+
 ## 🎉 Qo'shimcha Imkoniyatlar
 
-### Kelajakda qo'shilishi mumkin:
+### ✅ Qo'shilgan funksiyalar:
+
+- [x] ~~Pomodoro timer~~ ✅ Qo'shildi! (v2.0)
+- [x] ~~Punishment system~~ ✅ Qo'shildi! (v2.0)
+- [x] ~~Camera monitoring~~ ✅ Qo'shildi! (v2.0)
+- [x] ~~AI Vision Integration~~ ✅ Qo'shildi! (v2.2)
+- [x] ~~Auto notification stop~~ ✅ Qo'shildi! (v2.2)
+- [x] ~~Auto Pomodoro timer~~ ✅ Qo'shildi! (v2.2)
+- [x] ~~Test Mode~~ ✅ Qo'shildi! (v2.2)
+
+### Kelajakda qo'shilishi mumkin (v2.3+):
 
 - [ ] Web dashboard
-- [ ] Mobile ilova
+- [ ] Mobile ilova (Telegram Mini App)
 - [ ] Jamoa uchun shared tasks
-- [x] ~~Pomodoro timer~~ ✅ Qo'shildi!
-- [x] ~~Punishment system~~ ✅ Qo'shildi!
-- [x] ~~Camera monitoring~~ ✅ Qo'shildi!
 - [ ] Habit tracking
 - [ ] Voice commands
 - [ ] Multiple languages
 - [ ] Analytics dashboard
 - [ ] Video verification
 - [ ] AI progress analysis
+- [ ] Social features (progress sharing)
 
 ---
 
@@ -479,8 +532,19 @@ Muvaffaqiyat sari qadam tashlang! 💪
 
 ---
 
+## 📚 Qo'shimcha Dokumentatsiya
+
+- 📖 [TEST_MODE_GUIDE.md](TEST_MODE_GUIDE.md) - Test rejimi qo'llanma
+- 📋 [RELEASE_NOTES_VISION.md](RELEASE_NOTES_VISION.md) - v2.2.0 yangiliklar
+- 🚀 [DEPLOYMENT.md](DEPLOYMENT.md) - Deploy qo'llanma
+- 🇺🇿 [QOLLANMA_UZ.md](QOLLANMA_UZ.md) - O'zbek tili qo'llanma
+
+---
+
 **Yaratildi:** 2026-06-11  
-**Yangilandi:** 2026-06-12 (Focus Mode, Punishment System, Camera Monitoring)
-**Versiya:** 2.0.0  
-**Til:** Python 3.8+  
-**Platform:** Telegram
+**Yangilandi:** 2026-06-14 (AI Vision, Auto Timer, Test Mode)  
+**Versiya:** 2.2.0  
+**Til:** Python 3.9+  
+**Platform:** Telegram Bot API 7.0+
+
+🎉 **Muvaffaqiyat sari birgalikda!**
