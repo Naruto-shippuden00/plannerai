@@ -399,10 +399,20 @@ async def handle_any_photo(message: Message, state: FSMContext):
     """
     Har qanday rasm qabul qilish - STATE qat'iy nazar
     Bu handler birinchi o'rinda turishi kerak!
+    
+    CRITICAL FIX: Bildirishnomalarni darhol to'xtatish!
     """
     user_id = message.from_user.id
     
-    logger.info(f"📸 PHOTO RECEIVED from user {user_id} - checking state...")
+    logger.info(f"📸 PHOTO RECEIVED from user {user_id} - IMMEDIATELY STOPPING NOTIFICATIONS!")
+    
+    # 🔥 DARHOL bildirishnomalarni to'xtatish (aktiv session bor yoki yo'qligidan qat'iy nazar)
+    if user_id in active_notifications:
+        logger.warning(f"🛑 STOPPING active notifications for user {user_id}!")
+        await stop_continuous_notifications(user_id)
+        logger.info(f"✅ Notifications STOPPED for user {user_id}")
+    else:
+        logger.info(f"ℹ️ No active notifications for user {user_id}")
     
     # Hozirgi state'ni tekshirish
     current_state = await state.get_state()
@@ -415,11 +425,12 @@ async def handle_any_photo(message: Message, state: FSMContext):
         logger.info("ℹ️ No active session, informing user")
         await message.answer(
             "📸 Rasm qabul qilindi!\n\n"
+            "✅ Bildirishnomalar to'xtatildi!\n\n"
             "❓ Lekin hozirda aktiv vazifa yo'q.\n\n"
             "Vazifa boshlash uchun:\n"
             "1️⃣ /test_reminder - Test bildirishnoma\n"
             "2️⃣ Yoki jadvalingizdan vazifa boshlang\n\n"
-            "💡 Rasm yuborish faqat vazifa davomida kerak.",
+            "💡 Keyingi safar rasm yuborsangiz, Pomodoro timer boshlanadi.",
             parse_mode="Markdown"
         )
         return
@@ -460,10 +471,14 @@ async def handle_any_photo(message: Message, state: FSMContext):
         # Rasmni bazaga saqlash
         await add_focus_photo(session_id, photo_path)
         
-        # 🔥 MUHIM: Bildirishnomalarni TO'XTATISH
-        logger.info(f"🛑 STOPPING notifications for user {user_id}...")
-        await stop_continuous_notifications(user_id)
-        logger.info(f"✅ Notifications STOPPED for user {user_id}")
+        # 🔥 MUHIM: Bildirishnomalarni qayta tekshirish va to'xtatish
+        # (yuqorida allaqachon to'xtatilgan bo'lishi kerak, lekin qayta ishonch hosil qilamiz)
+        if user_id in active_notifications:
+            logger.warning(f"🛑 RE-STOPPING notifications for user {user_id} (still active after photo)")
+            await stop_continuous_notifications(user_id)
+            logger.info(f"✅ Notifications RE-STOPPED for user {user_id}")
+        else:
+            logger.info(f"✅ Notifications already stopped for user {user_id}")
         
         # Photo count
         from utils.database import get_focus_session_photos
