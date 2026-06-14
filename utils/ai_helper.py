@@ -38,20 +38,39 @@ async def analyze_task_photo(photo_path: str, task_id: int, user_id: int) -> str
     Returns:
         Tahlil matni
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"🤖 AI analysis started: photo={photo_path}, task_id={task_id}, user_id={user_id}")
+    
     if not client:
-        return "AI xizmat hozirda mavjud emas."
+        logger.error("❌ AI client not initialized!")
+        return "⚠️ AI xizmat hozirda mavjud emas.\n\n✅ Rasm qabul qilindi, davom eting!"
     
     try:
         # Vazifa ma'lumotlarini olish (agar kerak bo'lsa)
         from utils.database import get_task_by_id
-        task_info = await get_task_by_id(task_id, user_id)
-        task_name = task_info.get('task_name', 'vazifa') if task_info else 'vazifa'
-        category = task_info.get('category', '') if task_info else ''
+        task_info = None
+        task_name = 'vazifa'
+        category = ''
+        
+        try:
+            task_info = await get_task_by_id(task_id) if task_id else None
+            if task_info:
+                task_name = task_info.get('task_name', 'vazifa')
+                category = task_info.get('category', '')
+            logger.info(f"📋 Task info: name='{task_name}', category='{category}'")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not get task info: {e}")
         
         # Rasmni encode qilish
+        logger.info(f"📷 Encoding image: {photo_path}")
         base64_image = encode_image(photo_path)
         if not base64_image:
-            return "Rasmni o'qishda xatolik yuz berdi."
+            logger.error("❌ Image encoding failed!")
+            return "⚠️ Rasmni o'qishda xatolik yuz berdi.\n\n✅ Lekin rasm qabul qilindi, davom eting!"
+        
+        logger.info(f"✅ Image encoded: {len(base64_image)} bytes")
         
         prompt = f"""
 Siz o'quvchilarni motivatsiya qiluvchi AI yordamchisisiz. 
@@ -77,6 +96,8 @@ Format:
 💡 Tavsiya: [Qisqa tavsiya]
 """
         
+        logger.info("🚀 Calling Groq Vision API...")
+        
         response = client.chat.completions.create(
             model="llama-3.2-90b-vision-preview",  # Groq vision model
             messages=[
@@ -97,15 +118,19 @@ Format:
                 }
             ],
             temperature=0.7,
-            max_tokens=500
+            max_tokens=500,
+            timeout=30.0  # 30 soniya timeout
         )
         
         analysis = response.choices[0].message.content.strip()
+        logger.info(f"✅ AI analysis completed: {len(analysis)} chars")
+        logger.info(f"📝 Analysis result: {analysis[:100]}...")
+        
         return analysis
         
     except Exception as e:
-        print(f"AI photo analysis error: {e}")
-        return f"⚠️ AI tahlil xatolik: {str(e)}\n\nRasm qabul qilindi, davom eting!"
+        logger.error(f"❌ AI photo analysis error: {e}", exc_info=True)
+        return f"⚠️ AI tahlil qilishda xatolik yuz berdi.\n\n❌ Xato: {str(e)[:100]}\n\n✅ Lekin rasm qabul qilindi, davom eting!"
 
 async def generate_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
     """
