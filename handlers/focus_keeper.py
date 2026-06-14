@@ -346,6 +346,7 @@ async def handle_any_photo(message: Message, state: FSMContext):
                 logger.warning(f"Could not add achievement: {e}")
         
         # AI TAHLIL QILISH
+        logger.info(f"🤖 AI analysis step starting...")
         try:
             from utils.ai_helper import analyze_task_photo
             
@@ -356,9 +357,9 @@ async def handle_any_photo(message: Message, state: FSMContext):
                 parse_mode="Markdown"
             )
             
-            logger.info(f"🤖 Starting AI analysis...")
+            logger.info(f"🤖 Calling AI analysis...")
             analysis_result = await analyze_task_photo(photo_path, task_id, user_id)
-            logger.info(f"✅ AI analysis done: {len(analysis_result)} chars")
+            logger.info(f"✅ AI analysis completed: {len(analysis_result)} chars")
             
             await message.answer(
                 f"🤖 **AI TAHLIL NATIJASI**\n\n"
@@ -375,6 +376,8 @@ async def handle_any_photo(message: Message, state: FSMContext):
                 parse_mode="Markdown"
             )
         
+        logger.info(f"📨 Sending confirmation message...")
+        
         # Pomodoro timer start xabari
         await message.answer(
             f"✅ **RASM QABUL QILINDI!** ({photo_count}-rasm)\n\n"
@@ -387,6 +390,8 @@ async def handle_any_photo(message: Message, state: FSMContext):
             reply_markup=main_menu_keyboard()
         )
         
+        logger.info(f"✅ Confirmation message sent!")
+        
         # Session data
         session_with_task = {
             'id': session_id,
@@ -395,19 +400,22 @@ async def handle_any_photo(message: Message, state: FSMContext):
             'planned_duration': planned_duration
         }
         
-        logger.info(f"🚀 Starting Pomodoro timer...")
+        logger.info(f"🚀 CALLING start_pomodoro_session with data: {session_with_task}")
         
         # Pomodoro timerni boshlash
         try:
             await start_pomodoro_session(message.bot, user_id, session_with_task)
-            logger.info(f"✅ Pomodoro started successfully")
+            logger.info(f"✅ start_pomodoro_session RETURNED successfully")
         except Exception as pomodoro_error:
-            logger.error(f"❌ Pomodoro failed: {pomodoro_error}", exc_info=True)
+            logger.error(f"❌ POMODORO FAILED: {pomodoro_error}", exc_info=True)
             await message.answer(
                 "⚠️ Timerda xatolik yuz berdi!\n\n"
                 "Iltimos, /start dan qayta boshlang.",
                 parse_mode="Markdown"
             )
+            # Xatolik haqida to'liq ma'lumot
+            import traceback
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
         
         # State tozalash
         await state.clear()
@@ -451,17 +459,33 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
     
     OPTIMIZED VERSION - dynamic duration, better tracking + TEST MODE support
     """
+    logger.info(f"🍅 ENTERED start_pomodoro_session for user {user_id}")
+    
     # TEST MODE ni import qilish
-    from handlers.admin import get_pomodoro_duration, is_test_mode
+    try:
+        from handlers.admin import get_pomodoro_duration, is_test_mode
+        logger.info(f"✅ Admin functions imported successfully")
+    except Exception as import_error:
+        logger.error(f"❌ Failed to import admin functions: {import_error}")
+        # Fallback
+        get_pomodoro_duration = lambda uid, dur: dur
+        is_test_mode = lambda uid: False
     
     session_id = session_data['id']
     task_name = session_data['task_name']
     planned_duration_original = session_data['planned_duration']
     
-    # TEST MODE tekshirish
-    planned_duration = get_pomodoro_duration(user_id, planned_duration_original)
+    logger.info(f"📋 Session data: id={session_id}, task='{task_name}', duration={planned_duration_original}min")
     
-    test_mode_indicator = " [TEST MODE]" if is_test_mode(user_id) else ""
+    # TEST MODE tekshirish
+    try:
+        planned_duration = get_pomodoro_duration(user_id, planned_duration_original)
+        test_mode_indicator = " [TEST MODE]" if is_test_mode(user_id) else ""
+        logger.info(f"⚙️ Duration adjusted: {planned_duration}min, test_mode={is_test_mode(user_id)}")
+    except Exception as e:
+        logger.error(f"❌ Error checking test mode: {e}")
+        planned_duration = planned_duration_original
+        test_mode_indicator = ""
     
     logger.info(
         f"🍅 Starting Pomodoro session: user={user_id}, session={session_id}, "
@@ -474,9 +498,12 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
         active_pomodoro[user_id]['task'].cancel()
         await asyncio.sleep(0.1)
     
+    logger.info(f"📨 Preparing to send timer message to user {user_id}...")
+    
     # Darhol xabar yuborish va PIN qilish
     timer_message = None
     try:
+        logger.info(f"📤 Sending timer message...")
         # Timer xabari
         timer_message = await bot.send_message(
             user_id,
@@ -490,21 +517,25 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
             f"🚀 Boshlang! Men sizni nazorat qilaman!",
             parse_mode="Markdown"
         )
+        logger.info(f"✅ Timer message sent successfully! Message ID: {timer_message.message_id}")
         
         # Xabarni PIN qilish
         try:
+            logger.info(f"📌 Attempting to pin message {timer_message.message_id}...")
             await bot.pin_chat_message(
                 chat_id=user_id,
                 message_id=timer_message.message_id,
                 disable_notification=True  # Ovozli bildirishnoma yo'q
             )
-            logger.info(f"📌 Timer message pinned for user {user_id}")
+            logger.info(f"✅ Timer message pinned successfully!")
         except Exception as pin_error:
             logger.warning(f"⚠️ Could not pin message: {pin_error}")
         
     except Exception as e:
-        logger.error(f"Error sending Pomodoro start message: {e}")
-        # Agar xabar yuborilmasa, timer_message None bo'ladi
+        logger.error(f"❌ CRITICAL: Failed to send timer message: {e}", exc_info=True)
+        # Xatolik bo'lsa ham davom etamiz
+        import traceback
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
     
     # Har 15 daqiqada focus keeper xabarlari
     # Lekin faqat planned_duration ichida
@@ -521,18 +552,25 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
         )
     
     # Timer xabarini har daqiqada yangilash task
+    logger.info(f"🔄 Creating timer update task...")
     timer_update_task = None
     if timer_message:
         timer_update_task = asyncio.create_task(
             update_timer_message(bot, user_id, session_id, task_name, planned_duration, timer_message.message_id)
         )
+        logger.info(f"✅ Timer update task created")
+    else:
+        logger.warning(f"⚠️ No timer message, skipping update task")
     
     # Asosiy Pomodoro timer task
+    logger.info(f"⏱ Creating finish Pomodoro task...")
     pomodoro_task = asyncio.create_task(
         finish_pomodoro_session(bot, user_id, session_id, task_name, planned_duration)
     )
+    logger.info(f"✅ Finish Pomodoro task created")
     
     # Tracking - barcha ma'lumotlarni to'g'ri o'rnatamiz
+    logger.info(f"💾 Storing Pomodoro session data in active_pomodoro...")
     active_pomodoro[user_id] = {
         'task': pomodoro_task,
         'timer_update_task': timer_update_task,
@@ -541,7 +579,7 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
         'started_at': datetime.now(TASHKENT_TZ)
     }
     
-    logger.info(f"✅ Pomodoro session fully initialized for user {user_id}")
+    logger.info(f"✅✅✅ Pomodoro session FULLY INITIALIZED for user {user_id} ✅✅✅")
 
 async def send_pomodoro_check(bot, user_id: int, task_name: str, after_minutes: int, session_id: int):
     """
