@@ -511,13 +511,25 @@ async def start_pomodoro_session(bot, user_id: int, session_data: dict):
     timer_message = None
     try:
         logger.info(f"📤 Sending timer message...")
+        
+        # Countdown format
+        hours = planned_duration // 60
+        minutes = planned_duration % 60
+        if hours > 0:
+            countdown = f"{hours:02d}:{minutes:02d}"
+        else:
+            countdown = f"{minutes:02d}:00"
+        
         # Timer xabari
         timer_message = await bot.send_message(
             user_id,
             f"🍅 **POMODORO TIMER BOSHLANDI!**{test_mode_indicator}\n\n"
-            f"🎯 Vazifa: {task_name}\n"
-            f"⏱ Davomiyligi: {planned_duration} daqiqa\n"
-            f"⏳ Qolgan vaqt: {planned_duration} daqiqa\n\n"
+            f"🎯 Vazifa: **{task_name}**\n\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"⏱ **QOLGAN VAQT: {countdown}**\n"
+            f"━━━━━━━━━━━━━━━\n\n"
+            f"📊 Progress: [░░░░░░░░░░] 0%\n"
+            f"⏱ O'tgan: 0 min / {planned_duration} min\n\n"
             f"📱 Telefon: Silent mode\n"
             f"🔕 Notificationlar: O'chirilgan\n"
             f"💻 Faqat vazifa: Fokus 100%\n\n"
@@ -600,9 +612,9 @@ async def send_pomodoro_check(bot, user_id: int, task_name: str, after_minutes: 
 
 async def update_timer_message(bot, user_id: int, session_id: int, task_name: str, total_duration: int, message_id: int):
     """
-    Timer xabarini har daqiqada yangilash - qolgan vaqtni ko'rsatish
+    Timer xabarini har daqiqada yangilash - TESKARI SANOQ
     
-    OPTIMIZED VERSION
+    60:00 → 59:00 → 58:00 → ... → 01:00 → 00:00
     """
     try:
         start_time = datetime.now(TASHKENT_TZ)
@@ -616,11 +628,36 @@ async def update_timer_message(bot, user_id: int, session_id: int, task_name: st
                 logger.info(f"⚠️ Timer update stopped - session ended for user {user_id}")
                 break
             
-            remaining = total_duration - elapsed_minutes
+            remaining_minutes = total_duration - elapsed_minutes
             
-            # Progress bar
+            # Soat va daqiqalarni hisoblash
+            hours = remaining_minutes // 60
+            minutes = remaining_minutes % 60
+            
+            # Countdown format: 01:30 yoki 00:45
+            if hours > 0:
+                countdown = f"{hours:02d}:{minutes:02d}"
+            else:
+                countdown = f"{minutes:02d}:00"
+            
+            # Progress bar (10 belgili)
+            progress_percent = int((elapsed_minutes / total_duration) * 100)
             progress = int((elapsed_minutes / total_duration) * 10)
             progress_bar = "█" * progress + "░" * (10 - progress)
+            
+            # Vaqt qolganiga qarab emoji va xabar
+            if remaining_minutes <= 5:
+                time_emoji = "🔥"
+                motivation = "Oxirgi daqiqalar! Zo'r ish qilmoqdasiz! 🔥"
+            elif remaining_minutes <= 15:
+                time_emoji = "⚡️"
+                motivation = "Yaxshi! Yana bir oz! 💪"
+            elif remaining_minutes <= 30:
+                time_emoji = "💪"
+                motivation = "Ajoyib! Davom eting! ⚡️"
+            else:
+                time_emoji = "⏱"
+                motivation = "Fokusda qoling! Siz zo'rsiz! 💪"
             
             # Xabarni yangilash
             try:
@@ -629,19 +666,21 @@ async def update_timer_message(bot, user_id: int, session_id: int, task_name: st
                     message_id=message_id,
                     text=(
                         f"🍅 **POMODORO TIMER**\n\n"
-                        f"🎯 Vazifa: {task_name}\n"
-                        f"⏱ Umumiy: {total_duration} daqiqa\n"
-                        f"⏳ Qolgan: {remaining} daqiqa\n\n"
-                        f"📊 Progress: [{progress_bar}] {int((elapsed_minutes / total_duration) * 100)}%\n\n"
-                        f"💪 Fokusda qoling! Siz zo'rsiz!"
+                        f"🎯 Vazifa: **{task_name}**\n\n"
+                        f"━━━━━━━━━━━━━━━\n"
+                        f"{time_emoji} **QOLGAN VAQT: {countdown}**\n"
+                        f"━━━━━━━━━━━━━━━\n\n"
+                        f"📊 Progress: [{progress_bar}] {progress_percent}%\n"
+                        f"⏱ O'tgan: {elapsed_minutes} min / {total_duration} min\n\n"
+                        f"{motivation}"
                     ),
                     parse_mode="Markdown"
                 )
-                logger.debug(f"⏱ Timer updated: {remaining} min remaining for user {user_id}")
+                logger.debug(f"⏱ Timer updated: {countdown} remaining for user {user_id}")
             except Exception as e:
                 logger.warning(f"Could not update timer message: {e}")
         
-        logger.info(f"✅ Timer update completed for user {user_id}")
+        logger.info(f"✅ Timer countdown completed for user {user_id}")
         
     except asyncio.CancelledError:
         logger.info(f"🛑 Timer update cancelled for user {user_id}")
