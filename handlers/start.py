@@ -71,10 +71,12 @@ async def select_language(callback: CallbackQuery):
         "en": "English"
     }
     
+    selected_lang_name = lang_names.get(language, lang_names["uz"])
+    
     change_texts = {
-        "uz": f"✅ Til o'zgartirildi: {lang_names.get(language, 'O\'zbek')}",
-        "ru": f"✅ Язык изменён: {lang_names.get(language, 'Русский')}",
-        "en": f"✅ Language changed: {lang_names.get(language, 'English')}"
+        "uz": f"✅ Til o'zgartirildi: {selected_lang_name}",
+        "ru": f"✅ Язык изменён: {selected_lang_name}",
+        "en": f"✅ Language changed: {selected_lang_name}"
     }
     
     await callback.answer(change_texts.get(language, change_texts["uz"]), show_alert=True)
