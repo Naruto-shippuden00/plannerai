@@ -73,7 +73,38 @@ async def analyze_task_photo(photo_path: str, task_id: int, user_id: int, langua
     # Translations import
     from utils.translations import get_text
     
-    if not client or not HF_API_KEY:
+    # HUGGINGFACE_API_KEY tekshirish
+    if not HF_API_KEY or HF_API_KEY == 'your_huggingface_api_key_here':
+        logger.warning("⚠️ HUGGINGFACE_API_KEY not configured - skipping AI analysis")
+        
+        # Vazifa ma'lumotlarini olish
+        from utils.database import get_task_by_id
+        task_info = None
+        task_name = 'vazifa'
+        category = ''
+        
+        try:
+            task_info = await get_task_by_id(task_id, user_id) if task_id else None
+            if task_info:
+                task_name = task_info.get('task_name', 'vazifa')
+                category = task_info.get('category', '')
+        except Exception as e:
+            logger.warning(f"⚠️ Could not get task info: {e}")
+        
+        # API key bo'lmasa, oddiy success message
+        simple_message = {
+            "uz": f"📸 Rasm qabul qilindi!\n\n⭐️ Baho: 8/10\n\n💡 \"{task_name}\" vazifasi bo'yicha ajoyib! Davom eting! 💪\n\n✅ Fokusda qoling va muvaffaqiyatga erishing!",
+            "ru": f"📸 Фото принято!\n\n⭐️ Оценка: 8/10\n\n💡 Отлично по задаче \"{task_name}\"! Продолжайте! 💪\n\n✅ Оставайтесь в фокусе и достигайте успеха!",
+            "en": f"📸 Photo accepted!\n\n⭐️ Rating: 8/10\n\n💡 Great work on \"{task_name}\"! Keep going! 💪\n\n✅ Stay focused and achieve success!"
+        }
+        
+        return {
+            "is_valid": True,
+            "message": simple_message.get(language, simple_message["uz"]),
+            "confidence": 0.8
+        }
+    
+    if not client:
         logger.error("❌ AI client not initialized!")
         return {
             "is_valid": True,  # Xatolik bo'lsa, rasm qabul qilamiz
@@ -127,6 +158,8 @@ async def analyze_task_photo(photo_path: str, task_id: int, user_id: int, langua
                 lambda: requests.post(API_URL_CAPTION, headers=headers, data=image_data, timeout=30)
             )
             
+            logger.info(f"📡 API Response: status={response.status_code}")
+            
             if response.status_code == 200:
                 result = response.json()
                 
@@ -137,6 +170,13 @@ async def analyze_task_photo(photo_path: str, task_id: int, user_id: int, langua
                     caption = result.get('generated_text', '').lower()
                 
                 logger.info(f"✅ Image caption: {caption}")
+            elif response.status_code == 503:
+                logger.warning(f"⚠️ Model loading (503) - accepting photo by default")
+                return {
+                    "is_valid": True,
+                    "message": _format_success_message(task_name, category, "model loading", language),
+                    "confidence": 0.6
+                }
             else:
                 logger.warning(f"⚠️ Captioning failed: {response.status_code}, response: {response.text[:200]}")
                 # Captioning ishlamasa, rasmni qabul qilamiz
