@@ -241,166 +241,18 @@ async def stop_continuous_notifications(user_id: int):
     else:
         logger.debug(f"ℹ️ No active notifications for user {user_id}")
 
-@router.message(FocusState.waiting_for_photo, F.photo)
-async def receive_focus_photo(message: Message, state: FSMContext):
-    """
-    Focus vaqtida rasm qabul qilish - bildirishnomalarni to'xtatadi
-    
-    FIX: Task name va ma'lumotlarni to'g'ri olish
-    """
-    user_id = message.from_user.id
-    
-    logger.info(f"📸 Photo received from user {user_id}")
-    
-    # Aktiv sessionni olish
-    active_session = await get_active_focus_session(user_id)
-    
-    if not active_session:
-        logger.warning(f"⚠️ No active session for user {user_id}")
-        await message.answer(
-            "⚠️ Aktiv focus session topilmadi!\n\n"
-            "📋 Jadvalingizdan vazifa boshlang.",
-            reply_markup=main_menu_keyboard()
-        )
-        await state.clear()
-        return
-    
-    session_id = active_session['id']
-    task_id = active_session.get('task_id', 0)
-    planned_duration = active_session.get('planned_duration', 60)
-    
-    # Task ma'lumotlarini to'g'ri olish
-    from utils.database import get_task_by_id
-    task_info = await get_task_by_id(task_id) if task_id else None
-    task_name = task_info.get('task_name', 'Unknown Task') if task_info else 'Unknown Task'
-    
-    logger.info(f"📋 Task info: task_id={task_id}, name='{task_name}'")
-    
-    # Rasmni saqlash
-    photo = message.photo[-1]
-    photo_dir = "data/focus_photos"
-    
-    try:
-        os.makedirs(photo_dir, exist_ok=True)
-    except Exception as e:
-        logger.error(f"Error creating photo directory: {e}")
-    
-    file_name = f"{user_id}_{session_id}_{datetime.now(TASHKENT_TZ).strftime('%Y%m%d_%H%M%S')}.jpg"
-    photo_path = os.path.join(photo_dir, file_name)
-    
-    try:
-        # Rasmni yuklab olish
-        file = await message.bot.get_file(photo.file_id)
-        await message.bot.download_file(file.file_path, photo_path)
-        
-        logger.info(f"📥 Photo saved: {photo_path}")
-        
-        # Rasmni bazaga saqlash
-        await add_focus_photo(session_id, photo_path)
-        
-        # MUHIM: Bildirishnomalarni to'xtatish
-        await stop_continuous_notifications(user_id)
-        logger.info(f"🔕 Notifications stopped for user {user_id}")
-        
-        # Photo count
-        from utils.database import get_focus_session_photos
-        photos = await get_focus_session_photos(session_id)
-        photo_count = len(photos)
-        
-        # Achievement check - birinchi rasm
-        if photo_count == 1:
-            try:
-                await add_achievement(user_id, "first_photo", "Birinchi vazifa rasmi")
-            except Exception as e:
-                logger.warning(f"Could not add achievement: {e}")
-        
-        # AI TAHLIL QILISH
-        try:
-            from utils.ai_helper import analyze_task_photo
-            
-            # AI tahlil xabari
-            await message.answer(
-                "🤖 **AI TAHLIL QILINMOQDA...**\n\n"
-                "📸 Rasmingizni tahlil qilyapman...\n"
-                "⏳ Bir necha soniya kuting...",
-                parse_mode="Markdown"
-            )
-            
-            # AI tahlil
-            analysis_result = await analyze_task_photo(photo_path, task_id, user_id)
-            
-            # AI natijasini yuborish
-            await message.answer(
-                f"🤖 **AI TAHLIL NATIJASI**\n\n"
-                f"{analysis_result}\n\n"
-                f"✅ Tahlil yakunlandi!",
-                parse_mode="Markdown"
-            )
-            
-            logger.info(f"✅ AI analysis completed for user {user_id}")
-            
-        except Exception as e:
-            logger.error(f"❌ AI analysis failed for user {user_id}: {e}", exc_info=True)
-            await message.answer(
-                "⚠️ AI tahlil qilishda xatolik yuz berdi.\n\n"
-                "Lekin davom etamiz! Timer boshlanadi...",
-                parse_mode="Markdown"
-            )
-        
-        # Pomodoro timer start xabari
-        await message.answer(
-            f"✅ **RASM QABUL QILINDI!** ({photo_count}-rasm)\n\n"
-            f"🎉 Ajoyib! Bildirishnomalar to'xtatildi!\n\n"
-            f"⏱ Endi **POMODORO TIMER** boshlanadi!\n\n"
-            f"📊 Sizda {planned_duration} daqiqalik fokus sessiya bor.\n"
-            f"🔥 Men sizni nazorat qilib turaman!\n\n"
-            f"💪 Fokusda qoling va muvaffaqiyatga erishing!",
-            parse_mode="Markdown",
-            reply_markup=main_menu_keyboard()
-        )
-        
-        # Session data'ni to'ldirish Pomodoro uchun
-        session_with_task = {
-            'id': session_id,
-            'task_id': task_id,
-            'task_name': task_name,
-            'planned_duration': planned_duration
-        }
-        
-        logger.info(f"🚀 Starting Pomodoro timer for user {user_id}: session_id={session_id}, task='{task_name}', duration={planned_duration}")
-        
-        # Pomodoro timerni boshlash
-        try:
-            await start_pomodoro_session(message.bot, user_id, session_with_task)
-            logger.info(f"✅ Pomodoro session started successfully for user {user_id}")
-        except Exception as pomodoro_error:
-            logger.error(f"❌ CRITICAL: Pomodoro failed to start for user {user_id}: {pomodoro_error}", exc_info=True)
-            await message.answer(
-                "⚠️ Timerda xatolik yuz berdi!\n\n"
-                "Iltimos, /start dan qayta boshlang yoki admin bilan bog'laning.",
-                parse_mode="Markdown"
-            )
-        
-        # State tozalash
-        await state.clear()
-        
-        logger.info(f"✅ Photo processed successfully for user {user_id}, session {session_id}")
-        
-    except Exception as e:
-        logger.error(f"❌ Error saving focus photo for user {user_id}: {e}", exc_info=True)
-        await message.answer(
-            "❌ Rasmni saqlashda xatolik!\n\n"
-            "Iltimos, qayta urinib ko'ring.",
-            reply_markup=main_menu_keyboard()
-        )
+# ============================================
+# PHOTO HANDLERS - ORDER MATTERS!
+# Generic handler MUST be first to catch all photos
+# ============================================
 
 @router.message(F.photo)
 async def handle_any_photo(message: Message, state: FSMContext):
     """
-    Har qanday rasm qabul qilish - STATE qat'iy nazar
-    Bu handler birinchi o'rinda turishi kerak!
+    🔥 CRITICAL HANDLER - MUST BE FIRST!
     
-    CRITICAL FIX: Bildirishnomalarni darhol to'xtatish!
+    Har qanday rasm qabul qilish - STATE qat'iy nazar
+    Bu handler BIRINCHI bo'lishi kerak - bildirishnomalarni DARHOL to'xtatadi!
     """
     user_id = message.from_user.id
     
@@ -525,10 +377,62 @@ async def handle_any_photo(message: Message, state: FSMContext):
         # Pomodoro timer start xabari
         await message.answer(
             f"✅ **RASM QABUL QILINDI!** ({photo_count}-rasm)\n\n"
-            f"🎉 Ajoyib! Bildirishnomalar to'xtatildi!\n\n"
+            f"🎉 Ajoyib! Bildirishnomalar allaqachon to'xtatilgan!\n\n"
             f"⏱ Endi **POMODORO TIMER** boshlanadi!\n\n"
             f"📊 Sizda {planned_duration} daqiqalik fokus sessiya bor.\n"
             f"🔥 Men sizni nazorat qilib turaman!\n\n"
+            f"💪 Fokusda qoling va muvaffaqiyatga erishing!",
+            parse_mode="Markdown",
+            reply_markup=main_menu_keyboard()
+        )
+        
+        # Session data
+        session_with_task = {
+            'id': session_id,
+            'task_id': task_id,
+            'task_name': task_name,
+            'planned_duration': planned_duration
+        }
+        
+        logger.info(f"🚀 Starting Pomodoro timer...")
+        
+        # Pomodoro timerni boshlash
+        try:
+            await start_pomodoro_session(message.bot, user_id, session_with_task)
+            logger.info(f"✅ Pomodoro started successfully")
+        except Exception as pomodoro_error:
+            logger.error(f"❌ Pomodoro failed: {pomodoro_error}", exc_info=True)
+            await message.answer(
+                "⚠️ Timerda xatolik yuz berdi!\n\n"
+                "Iltimos, /start dan qayta boshlang.",
+                parse_mode="Markdown"
+            )
+        
+        # State tozalash
+        await state.clear()
+        
+        logger.info(f"✅ COMPLETE: Photo processed for user {user_id}")
+        
+    except Exception as e:
+        logger.error(f"❌ CRITICAL ERROR processing photo: {e}", exc_info=True)
+        await message.answer(
+            "❌ Rasmni saqlashda xatolik!\n\n"
+            "Iltimos, qayta urinib ko'ring.",
+            reply_markup=main_menu_keyboard()
+        )
+
+@router.message(FocusState.waiting_for_photo, F.photo)
+async def receive_focus_photo(message: Message, state: FSMContext):
+    """
+    ⚠️ DEPRECATED - This handler is now redundant
+    
+    The generic F.photo handler above handles all photos.
+    This handler is kept for backwards compatibility but should never trigger
+    because the generic handler processes the photo first.
+    """
+    logger.warning(f"⚠️ DEPRECATED handler triggered for user {message.from_user.id}")
+    # Redirect to generic handler
+    await handle_any_photo(message, state)
             f"💪 Fokusda qoling va muvaffaqiyatga erishing!",
             parse_mode="Markdown",
             reply_markup=main_menu_keyboard()

@@ -55,15 +55,15 @@ async def main():
     else:
         logger.warning("AI initialization failed. Using fallback methods.")
     
-    # Routerlarni qo'shish
+    # Routerlarni qo'shish - MUHIM: Focus keeper eng birinchi bo'lishi kerak!
+    dp.include_router(focus_keeper.router)  # Focus keeper BIRINCHI - rasm handleri uchun
     dp.include_router(start.router)
-    dp.include_router(admin.router)  # Admin birinchi bo'lishi kerak
+    dp.include_router(admin.router)
     dp.include_router(settings.router)
-    dp.include_router(focus_keeper.router)  # Focus keeper
     dp.include_router(tasks.router)
     dp.include_router(schedule.router)
     dp.include_router(reminders.router)
-    dp.include_router(punishments.router)  # Punishments
+    dp.include_router(punishments.router)
     dp.include_router(stats.router)
     dp.include_router(tests.router)
     
