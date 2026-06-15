@@ -206,31 +206,49 @@ async def send_task_reminder(bot: Bot, user_id: int, task_id: int, task_name: st
             logger.error(f"❌ Error creating focus session: {e}", exc_info=True)
             return
         
-        # FSM state o'rnatish
+        # FSM state o'rnatish - OPTIMIZED va ISHONCHLI
         try:
-            # Bot modulidan dispatcher ni import qilish
             import sys
-            if 'bot' in sys.modules:
+            dp = None
+            
+            # 1-usul: handlers modulidan topish (eng ishonchli)
+            try:
+                import handlers as handlers_module
+                if hasattr(handlers_module, 'dp') and handlers_module.dp is not None:
+                    dp = handlers_module.dp
+                    logger.info("✅ Dispatcher found in handlers module")
+            except Exception as e:
+                logger.debug(f"Could not import from handlers: {e}")
+            
+            # 2-usul: bot modulidan topish
+            if not dp and 'bot' in sys.modules:
                 bot_module = sys.modules['bot']
-                if hasattr(bot_module, 'dp'):
-                    from aiogram.fsm.context import FSMContext
-                    from aiogram.fsm.storage.base import StorageKey
-                    
-                    storage_key = StorageKey(bot_id=bot.id, chat_id=user_id, user_id=user_id)
-                    state = FSMContext(storage=bot_module.dp.storage, key=storage_key)
-                    await state.set_state(FocusState.waiting_for_photo)
-                    await state.update_data(
-                        session_id=session_id, 
-                        task_id=task_id, 
-                        task_name=task_name,
-                        start_time=start_time_only,
-                        end_time=end_time
-                    )
-                    logger.info(f"✅ FSM state set for user {user_id}, session {session_id}")
-                else:
-                    logger.warning("⚠️ Dispatcher not found in bot module")
+                if hasattr(bot_module, 'dp') and bot_module.dp is not None:
+                    dp = bot_module.dp
+                    logger.info("✅ Dispatcher found in bot module")
+            
+            if dp:
+                from aiogram.fsm.context import FSMContext
+                from aiogram.fsm.storage.base import StorageKey
+                
+                storage_key = StorageKey(bot_id=bot.id, chat_id=user_id, user_id=user_id)
+                state = FSMContext(storage=dp.storage, key=storage_key)
+                
+                # State o'rnatish
+                await state.set_state(FocusState.waiting_for_photo)
+                await state.update_data(
+                    session_id=session_id, 
+                    task_id=task_id, 
+                    task_name=task_name,
+                    start_time=start_time_only,
+                    end_time=end_time,
+                    scheduler_triggered=True  # Bu scheduler tomonidan qo'shilganligini bildiradi
+                )
+                logger.info(f"✅ FSM state set successfully: user={user_id}, session={session_id}, state=FocusState.waiting_for_photo")
             else:
-                logger.warning("⚠️ Bot module not loaded yet")
+                logger.error("❌ CRITICAL: Dispatcher not found!")
+                logger.error("❌ Photo handler will not work properly!")
+                logger.error("❌ User will not be able to stop notifications by sending photo!")
         except Exception as e:
             logger.error(f"❌ Error setting FSM state: {e}", exc_info=True)
         

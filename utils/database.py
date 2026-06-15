@@ -308,14 +308,21 @@ async def add_schedule_item(user_id: int, task_id: int, day_of_week: int, start_
         await db.commit()
 
 async def get_schedule(user_id: int, day_of_week: Optional[int] = None) -> List[Dict]:
-    """Jadvalni olish"""
+    """
+    Jadvalni olish
+    
+    FIXED: Faqat aktiv va bajarilmagan vazifalar uchun schedule qaytaradi
+    """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         query = """
             SELECT s.*, t.task_name, t.category 
             FROM schedule s
-            JOIN tasks t ON s.task_id = t.id
-            WHERE s.user_id = ? AND s.active = 1
+            INNER JOIN tasks t ON s.task_id = t.id
+            WHERE s.user_id = ? 
+              AND s.active = 1
+              AND t.active = 1
+              AND t.completed = 0
         """
         params = [user_id]
         
@@ -772,18 +779,29 @@ async def get_user_schedule_for_today(user_id: int, day_of_week: int) -> List[Di
     """
     Foydalanuvchining bugungi jadvalini olish
     day_of_week: 0=Monday, 6=Sunday
+    
+    FIXED: Faqat aktiv va bajarilmagan vazifalar uchun schedule qaytaradi
     """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("""
             SELECT s.id, s.task_id, s.start_time, s.end_time, t.task_name, t.category
             FROM schedule s
-            LEFT JOIN tasks t ON s.task_id = t.id
-            WHERE s.user_id = ? AND s.day_of_week = ? AND s.active = 1
+            INNER JOIN tasks t ON s.task_id = t.id
+            WHERE s.user_id = ? 
+              AND s.day_of_week = ? 
+              AND s.active = 1
+              AND t.active = 1
+              AND t.completed = 0
             ORDER BY s.start_time
         """, (user_id, day_of_week)) as cursor:
             rows = await cursor.fetchall()
-            return [dict(row) for row in rows]
+            result = [dict(row) for row in rows]
+            logger.debug(
+                f"Schedule for user {user_id}, day {day_of_week}: "
+                f"{len(result)} active tasks found"
+            )
+            return result
 
 # ============== FOCUS SESSION FUNCTIONS ==============
 

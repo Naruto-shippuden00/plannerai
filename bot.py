@@ -67,6 +67,11 @@ async def main():
     dp.include_router(stats.router)
     dp.include_router(tests.router)
     
+    # Dispatcher'ni handlers moduliga eksport qilish (scheduler uchun)
+    import handlers
+    handlers.set_dispatcher(dp)
+    logger.info("Dispatcher exported to handlers module")
+    
     # Schedulerni ishga tushirish
     logger.info("Scheduler initializing...")
     init_scheduler(bot)
