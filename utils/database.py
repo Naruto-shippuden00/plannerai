@@ -1020,16 +1020,6 @@ async def get_task_by_name(user_id: int, task_name: str) -> Optional[Dict]:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
-async def get_task_by_id(task_id: int) -> Optional[Dict]:
-    """Vazifani ID bo'yicha topish"""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute("""
-            SELECT * FROM tasks WHERE id = ?
-        """, (task_id,)) as cursor:
-            row = await cursor.fetchone()
-            return dict(row) if row else None
-
 # ============== ACHIEVEMENTS & STATISTICS ==============
 
 async def add_achievement(user_id: int, achievement_type: str, achievement_name: str):

@@ -80,7 +80,7 @@ Bajarilgan: {stats['total_completions']} ta
 Kategoriya: {stats['top_category']['category']}
 Vazifalar: {stats['top_category']['count']} ta
 
-📅 **Vaqt:** {datetime.now().strftime('%Y-%m-%d %H:%M')}
+📅 **Vaqt:** {datetime.now(TASHKENT_TZ).strftime('%Y-%m-%d %H:%M')}
 """
     
     await message.answer(text, parse_mode="Markdown")
@@ -131,6 +131,8 @@ async def check_bot_status(message: Message):
         await message.answer("❌ Bu komanda faqat admin uchun!")
         return
     
+    from zoneinfo import ZoneInfo
+    TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
     from utils.scheduler import scheduler
     from handlers.focus_keeper import active_notifications
     
@@ -143,7 +145,7 @@ async def check_bot_status(message: Message):
     bot_status_token = '✅ Mavjud' if bot_token else '❌ Yoq'
     bot_status_groq = '✅ Mavjud' if groq_key else '❌ Yoq'
     bot_status_admin = f'✅ {admin_id}' if admin_id else '❌ Yoq'
-    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    current_time = datetime.now(TASHKENT_TZ).strftime('%Y-%m-%d %H:%M:%S')
     
     # Scheduler info
     jobs = scheduler.get_jobs()
@@ -188,6 +190,8 @@ async def test_reminder_command(message: Message, state: FSMContext):
         await message.answer("❌ Bu komanda faqat admin uchun!")
         return
     
+    from zoneinfo import ZoneInfo
+    TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
     from utils.database import get_user_tasks, create_focus_session
     from handlers.focus_keeper import start_continuous_notifications, FocusState
     
@@ -236,13 +240,13 @@ async def test_reminder_command(message: Message, state: FSMContext):
             session_id=session_id,
             task_id=task_id,
             task_name=task_name,
-            start_time=datetime.now().strftime('%H:%M'),
-            end_time=(datetime.now() + timedelta(minutes=duration_minutes)).strftime('%H:%M')
+            start_time=datetime.now(TASHKENT_TZ).strftime('%H:%M'),
+            end_time=(datetime.now(TASHKENT_TZ) + timedelta(minutes=duration_minutes)).strftime('%H:%M')
         )
         
         # Test reminder xabari
-        start_time = datetime.now().strftime('%H:%M')
-        end_time = (datetime.now() + timedelta(minutes=duration_minutes)).strftime('%H:%M')
+        start_time = datetime.now(TASHKENT_TZ).strftime('%H:%M')
+        end_time = (datetime.now(TASHKENT_TZ) + timedelta(minutes=duration_minutes)).strftime('%H:%M')
         
         message_text = (
             f"⏰ **VAZIFA VAQTI KELDI!** [TEST]\n\n"
