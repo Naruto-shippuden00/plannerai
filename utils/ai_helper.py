@@ -384,8 +384,10 @@ Tasks ({task_count}):
 
 Rules:
 - Work hours: {work_start}-{work_end} (don't schedule)
-- Free time: after {work_end}
-- 2-3 tasks per day
+- Free time: after {work_end} until 22:00
+- Schedule as many tasks as fit until 22:00 each day
+- Add 15 min break between tasks
+- Don't exceed 22:00
 
 JSON format:
 {{"monday": [{{"time": "17:00-18:30", "task": "Task name", "task_id": 1}}], ...}}
@@ -425,7 +427,7 @@ Return ONLY JSON, no text!"""
 def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
     """
     Aqlli algoritm bilan jadval tuzish (AI ishlamasa)
-    Har kunga har xil vazifalarni taqsimlaydi
+    Har kunga 22:00 gacha qancha vazifa sig'sa shuncha taqsimlaydi
     """
     schedule = {
         "monday": [],
@@ -453,6 +455,9 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
     # Mavjud vaqt oralig'i (ishdan keyin)
     start_hour = work_end_hour + 1  # 1 soat dam olish
     
+    # 22:00 ga qadar ishlash
+    end_hour_limit = 22
+    
     # Har bir vazifa uchun haftalik necha marta schedule qilish kerak
     task_frequency = {}
     for task in sorted_tasks:
@@ -464,19 +469,16 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
         else:
             task_frequency[task['id']] = 2  # Haftada 2 marta
     
-    # Har bir kun uchun 2-3 ta slot - DINAMIK HISOBLASH
     # Round-robin usulida taqsimlash
     task_assignments = {task['id']: 0 for task in sorted_tasks}  # Har bir vazifa necha marta qo'shilgani
     
     for day_idx, day in enumerate(weekdays):
-        # Har kuni 2 ta vazifa
-        daily_task_count = 0
-        
         # Har kun uchun boshlanish vaqti
         current_hour = start_hour
         current_minute = 0
         
-        while daily_task_count < 2:
+        # 22:00 gacha qancha vazifa sig'sa shuncha qo'yamiz
+        while current_hour < end_hour_limit:
             # Eng kam qo'shilgan va frequency'ga yetmagan vazifani topish
             best_task = None
             min_assignments = float('inf')
@@ -490,8 +492,8 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
                 if current_assignments < target_frequency:
                     # Va eng kam qo'shilgan vazifa bo'lsa
                     if current_assignments < min_assignments:
-                        # Va bu vazifa bugungi kundagi birinchi vazifa bilan bir xil bo'lmasa
-                        if not schedule[day] or schedule[day][0]['task_id'] != task_id:
+                        # Va bu vazifa bugungi kundagi oxirgi vazifa bilan bir xil bo'lmasa
+                        if not schedule[day] or schedule[day][-1]['task_id'] != task_id:
                             best_task = task
                             min_assignments = current_assignments
             
@@ -508,6 +510,11 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
                 end_minute = total_end_minutes % 60
                 end_time_str = f"{end_hour:02d}:{end_minute:02d}"
                 
+                # Agar vazifa tugash vaqti 22:00 dan oshib ketsa, qo'shmaymiz
+                if end_hour > end_hour_limit or (end_hour == end_hour_limit and end_minute > 0):
+                    logger.info(f"⏰ Stopped scheduling for {day}: Would end at {end_time_str}, limit is {end_hour_limit}:00")
+                    break
+                
                 time_slot = f"{start_time_str}-{end_time_str}"
                 
                 schedule[day].append({
@@ -516,18 +523,22 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
                     "task_id": best_task['id']
                 })
                 task_assignments[best_task['id']] += 1
-                daily_task_count += 1
+                
+                logger.info(f"✅ Scheduled for {day}: {best_task['task_name']} at {time_slot}")
                 
                 # Keyingi vazifa uchun vaqtni yangilash (15 daqiqa tanaffus)
                 next_total_minutes = total_end_minutes + 15
                 current_hour = (next_total_minutes // 60) % 24
                 current_minute = next_total_minutes % 60
                 
-                # Agar 22:00 dan keyin bo'lsa, to'xtatamiz
-                if current_hour >= 22:
+                # Agar 22:00 ga yaqinlashsak, to'xtatamiz
+                if current_hour >= end_hour_limit:
+                    logger.info(f"⏰ Reached time limit for {day}: {current_hour}:00")
                     break
             else:
-                break  # Boshqa vazifa yo'q
+                # Boshqa vazifa yo'q yoki barcha vazifalar o'z frequency'ga yetdi
+                logger.info(f"✅ All tasks scheduled for {day}")
+                break
     
     # Yakshanba - review va test kuni
     schedule["sunday"] = [
