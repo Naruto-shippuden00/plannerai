@@ -157,9 +157,9 @@ async def send_task_reminder(bot: Bot, user_id: int, task_id: int, task_name: st
         logger.info(f"📤 Sending reminder: user={user_id}, task={task_id}, name='{task_name}'")
         
         # Task ma'lumotlarini olish
-        task = await get_task_by_id(task_id)
+        task = await get_task_by_id(task_id, user_id)
         if not task:
-            logger.error(f"❌ Task {task_id} not found in database")
+            logger.error(f"❌ Task {task_id} not found in database for user {user_id}")
             return
         
         # Start_time formatidan end_time ni olish
