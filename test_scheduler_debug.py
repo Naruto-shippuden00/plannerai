@@ -115,8 +115,10 @@ async def debug_scheduler():
     
     # 4. Environment variables
     print(f"\n🔑 Environment Variables:")
-    print(f"   BOT_TOKEN: {'✅ Mavjud' if os.getenv('BOT_TOKEN') else '❌ Yo\'q'}")
-    print(f"   GROQ_API_KEY: {'✅ Mavjud' if os.getenv('GROQ_API_KEY') else '❌ Yo\'q'}")
+    bot_token_status = '✅ Mavjud' if os.getenv('BOT_TOKEN') else '❌ Yoq'
+    groq_key_status = '✅ Mavjud' if os.getenv('GROQ_API_KEY') else '❌ Yoq'
+    print(f"   BOT_TOKEN: {bot_token_status}")
+    print(f"   GROQ_API_KEY: {groq_key_status}")
     
     # 5. Keyingi bildirishnoma vaqti
     print(f"\n⏰ Keyingi bildirishnoma:")

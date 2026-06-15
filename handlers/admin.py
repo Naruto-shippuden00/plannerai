@@ -6,6 +6,7 @@ from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import os
 import asyncio
 
@@ -17,6 +18,9 @@ from utils.database import (
 from utils.keyboards import main_menu_keyboard
 
 router = Router()
+
+# Tashkent timezone
+TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
 
 def is_admin(user_id: int) -> bool:
     """Admin tekshirish"""
@@ -131,8 +135,6 @@ async def check_bot_status(message: Message):
         await message.answer("❌ Bu komanda faqat admin uchun!")
         return
     
-    from zoneinfo import ZoneInfo
-    TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
     from utils.scheduler import scheduler
     from handlers.focus_keeper import active_notifications
     
@@ -190,8 +192,6 @@ async def test_reminder_command(message: Message, state: FSMContext):
         await message.answer("❌ Bu komanda faqat admin uchun!")
         return
     
-    from zoneinfo import ZoneInfo
-    TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
     from utils.database import get_user_tasks, create_focus_session
     from handlers.focus_keeper import start_continuous_notifications, FocusState
     
@@ -312,9 +312,6 @@ async def toggle_test_mode(message: Message):
         await message.answer("❌ Bu komanda faqat admin uchun!")
         return
     
-    from zoneinfo import ZoneInfo
-    TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
-    
     user_id = message.from_user.id
     
     # Test mode holatini aniqlash
@@ -419,9 +416,6 @@ async def test_mode_status(message: Message):
     if not is_admin(message.from_user.id):
         await message.answer("❌ Bu komanda faqat admin uchun!")
         return
-    
-    from zoneinfo import ZoneInfo
-    TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
     
     user_id = message.from_user.id
     
