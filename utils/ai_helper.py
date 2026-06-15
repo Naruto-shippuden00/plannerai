@@ -388,6 +388,9 @@ Rules:
 - Schedule as many tasks as fit until 22:00 each day
 - Add 15 min break between tasks
 - Don't exceed 22:00
+- Balance tasks by priority each day: 2-3 High, 1-2 Medium, 0-1 Low
+- Mix categories each day (don't schedule same category consecutively)
+- Distribute tasks randomly across days
 
 JSON format:
 {{"monday": [{{"time": "17:00-18:30", "task": "Task name", "task_id": 1}}], ...}}
@@ -428,7 +431,10 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
     """
     Aqlli algoritm bilan jadval tuzish (AI ishlamasa)
     Har kunga 22:00 gacha qancha vazifa sig'sa shuncha taqsimlaydi
+    Vazifalarni kategoriya va prioritet bo'yicha balanslangan tarzda taqsimlaydi
     """
+    import random
+    
     schedule = {
         "monday": [],
         "tuesday": [],
@@ -442,8 +448,27 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
     if not tasks:
         return schedule
     
-    # Prioritet bo'yicha saralash
-    sorted_tasks = sorted(tasks, key=lambda x: x.get('priority', 1), reverse=True)
+    # Vazifalarni prioritet bo'yicha guruhlash
+    high_priority_tasks = [t for t in tasks if t.get('priority', 1) == 3]
+    medium_priority_tasks = [t for t in tasks if t.get('priority', 1) == 2]
+    low_priority_tasks = [t for t in tasks if t.get('priority', 1) == 1]
+    
+    # Har bir prioritet guruhini kategoriya bo'yicha guruhlash
+    def group_by_category(task_list):
+        categories = {}
+        for task in task_list:
+            cat = task.get('category', 'Other')
+            if cat not in categories:
+                categories[cat] = []
+            categories[cat].append(task)
+        return categories
+    
+    high_by_cat = group_by_category(high_priority_tasks)
+    medium_by_cat = group_by_category(medium_priority_tasks)
+    low_by_cat = group_by_category(low_priority_tasks)
+    
+    logger.info(f"📊 Tasks grouped: High={len(high_priority_tasks)}, Medium={len(medium_priority_tasks)}, Low={len(low_priority_tasks)}")
+    logger.info(f"📊 Categories: High={list(high_by_cat.keys())}, Medium={list(medium_by_cat.keys())}, Low={list(low_by_cat.keys())}")
     
     # Haftaning kunlari
     weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
@@ -458,9 +483,12 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
     # 22:00 ga qadar ishlash
     end_hour_limit = 22
     
+    # Har bir vazifa qancha marta schedule qilinganini kuzatish
+    task_assignments = {task['id']: 0 for task in tasks}
+    
     # Har bir vazifa uchun haftalik necha marta schedule qilish kerak
     task_frequency = {}
-    for task in sorted_tasks:
+    for task in tasks:
         priority = task.get('priority', 1)
         if priority == 3:
             task_frequency[task['id']] = 5  # Haftada 5 marta
@@ -469,35 +497,73 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
         else:
             task_frequency[task['id']] = 2  # Haftada 2 marta
     
-    # Round-robin usulida taqsimlash
-    task_assignments = {task['id']: 0 for task in sorted_tasks}  # Har bir vazifa necha marta qo'shilgani
-    
+    # Har bir kun uchun jadval tuzish
     for day_idx, day in enumerate(weekdays):
-        # Har kun uchun boshlanish vaqti
         current_hour = start_hour
         current_minute = 0
         
+        # Bugungi kun uchun qo'shilgan kategoriyalar va vazifalar
+        daily_categories_used = []
+        daily_priority_count = {3: 0, 2: 0, 1: 0}  # Har bir prioritetdan qancha qo'shilgan
+        
+        logger.info(f"\n📅 Planning {day}...")
+        
         # 22:00 gacha qancha vazifa sig'sa shuncha qo'yamiz
         while current_hour < end_hour_limit:
-            # Eng kam qo'shilgan va frequency'ga yetmagan vazifani topish
+            # Ushbu kun uchun eng mos vazifani tanlash
             best_task = None
-            min_assignments = float('inf')
             
-            for task in sorted_tasks:
-                task_id = task['id']
-                current_assignments = task_assignments[task_id]
-                target_frequency = task_frequency[task_id]
+            # Strategiya: Prioritetlarni balansli taqsimlash
+            # 1. Avval high priority vazifalarni qo'shamiz (agar kam bo'lsa)
+            # 2. Keyin medium priority
+            # 3. So'ngra low priority
+            
+            # Qaysi prioritet guruhidan vazifa tanlashni aniqlash
+            candidate_tasks = []
+            
+            # High priority vazifalar (eng ko'p 2-3 ta kuniga)
+            if daily_priority_count[3] < 3:
+                for cat, cat_tasks in high_by_cat.items():
+                    # Kategoriya takrorlanmasin (yoki kam takrorlansa)
+                    if daily_categories_used.count(cat) < 2:
+                        for task in cat_tasks:
+                            if task_assignments[task['id']] < task_frequency[task['id']]:
+                                candidate_tasks.append((task, 3, cat))  # (task, priority, category)
+            
+            # Medium priority vazifalar (kuniga 1-2 ta)
+            if daily_priority_count[2] < 2:
+                for cat, cat_tasks in medium_by_cat.items():
+                    if daily_categories_used.count(cat) < 2:
+                        for task in cat_tasks:
+                            if task_assignments[task['id']] < task_frequency[task['id']]:
+                                candidate_tasks.append((task, 2, cat))
+            
+            # Low priority vazifalar (kuniga 0-1 ta)
+            if daily_priority_count[1] < 1:
+                for cat, cat_tasks in low_by_cat.items():
+                    if daily_categories_used.count(cat) < 1:
+                        for task in cat_tasks:
+                            if task_assignments[task['id']] < task_frequency[task['id']]:
+                                candidate_tasks.append((task, 1, cat))
+            
+            # Agar kandidat vazifalar bo'lmasa, boshqa strategiyani sinab ko'ramiz
+            if not candidate_tasks:
+                # Barcha vazifalardan eng kam qo'shilganini topamiz
+                for task in tasks:
+                    if task_assignments[task['id']] < task_frequency[task['id']]:
+                        # Bugungi oxirgi vazifa bilan bir xil bo'lmasin
+                        if not schedule[day] or schedule[day][-1]['task_id'] != task['id']:
+                            candidate_tasks.append((task, task.get('priority', 1), task.get('category', 'Other')))
+            
+            # Kandidatlar ichidan random tanlash (diversity uchun)
+            if candidate_tasks:
+                # Prioritet bo'yicha saralash (yuqori prioritetni afzal ko'ramiz)
+                candidate_tasks.sort(key=lambda x: (x[1], task_frequency[x[0]['id']] - task_assignments[x[0]['id']]), reverse=True)
                 
-                # Agar bu vazifa hali target frequency'ga yetmagan bo'lsa
-                if current_assignments < target_frequency:
-                    # Va eng kam qo'shilgan vazifa bo'lsa
-                    if current_assignments < min_assignments:
-                        # Va bu vazifa bugungi kundagi oxirgi vazifa bilan bir xil bo'lmasa
-                        if not schedule[day] or schedule[day][-1]['task_id'] != task_id:
-                            best_task = task
-                            min_assignments = current_assignments
-            
-            if best_task:
+                # Top 3 kandidatdan random birini tanlaymiz (diversity)
+                top_candidates = candidate_tasks[:min(3, len(candidate_tasks))]
+                best_task, priority, category = random.choice(top_candidates)
+                
                 # Vazifaning davomiyligini olish (daqiqalarda)
                 duration_minutes = best_task.get('duration_minutes', 60)
                 
@@ -520,11 +586,15 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
                 schedule[day].append({
                     "time": time_slot,
                     "task": best_task['task_name'],
-                    "task_id": best_task['id']
+                    "task_id": best_task['id'],
+                    "category": category,
+                    "priority": priority
                 })
                 task_assignments[best_task['id']] += 1
+                daily_categories_used.append(category)
+                daily_priority_count[priority] += 1
                 
-                logger.info(f"✅ Scheduled for {day}: {best_task['task_name']} at {time_slot}")
+                logger.info(f"✅ {day}: {best_task['task_name']} ({category}, P{priority}) at {time_slot}")
                 
                 # Keyingi vazifa uchun vaqtni yangilash (15 daqiqa tanaffus)
                 next_total_minutes = total_end_minutes + 15
@@ -539,6 +609,9 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
                 # Boshqa vazifa yo'q yoki barcha vazifalar o'z frequency'ga yetdi
                 logger.info(f"✅ All tasks scheduled for {day}")
                 break
+        
+        # Kunlik statistika
+        logger.info(f"📊 {day} summary: High={daily_priority_count[3]}, Medium={daily_priority_count[2]}, Low={daily_priority_count[1]}")
     
     # Yakshanba - review va test kuni
     schedule["sunday"] = [
