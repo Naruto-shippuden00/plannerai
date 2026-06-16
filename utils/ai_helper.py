@@ -506,23 +506,36 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
         daily_categories_used = []
         daily_priority_count = {3: 0, 2: 0, 1: 0}  # Har bir prioritetdan qancha qo'shilgan
         
-        logger.info(f"\n📅 Planning {day}...")
+        # Random pattern tanlash har kuni uchun:
+        # Pattern 1: 2 high + 2 medium + 2 low (6 ta)
+        # Pattern 2: 2 high + 1 medium + 1 low (4 ta)
+        # Pattern 3: 2 high + 2 medium + 1 low (5 ta)
+        # Pattern 4: 3 high + 1 medium + 1 low (5 ta)
+        patterns = [
+            {3: 2, 2: 2, 1: 2},  # 2+2+2
+            {3: 2, 2: 1, 1: 1},  # 2+1+1
+            {3: 2, 2: 2, 1: 1},  # 2+2+1
+            {3: 3, 2: 1, 1: 1},  # 3+1+1
+        ]
+        daily_pattern = random.choice(patterns)
+        
+        logger.info(f"\n📅 Planning {day} with pattern: High={daily_pattern[3]}, Medium={daily_pattern[2]}, Low={daily_pattern[1]}")
         
         # 22:00 gacha qancha vazifa sig'sa shuncha qo'yamiz
         while current_hour < end_hour_limit:
             # Ushbu kun uchun eng mos vazifani tanlash
             best_task = None
             
-            # Strategiya: Prioritetlarni balansli taqsimlash
-            # 1. Avval high priority vazifalarni qo'shamiz (agar kam bo'lsa)
+            # Strategiya: Patternni qo'llash
+            # 1. Avval high priority vazifalarni qo'shamiz (pattern bo'yicha limit)
             # 2. Keyin medium priority
             # 3. So'ngra low priority
             
             # Qaysi prioritet guruhidan vazifa tanlashni aniqlash
             candidate_tasks = []
             
-            # High priority vazifalar (eng ko'p 2-3 ta kuniga)
-            if daily_priority_count[3] < 3:
+            # High priority vazifalar (pattern bo'yicha limit)
+            if daily_priority_count[3] < daily_pattern[3]:
                 for cat, cat_tasks in high_by_cat.items():
                     # Kategoriya takrorlanmasin (yoki kam takrorlansa)
                     if daily_categories_used.count(cat) < 2:
@@ -530,18 +543,18 @@ def generate_simple_schedule(tasks: List[Dict], constraints: Dict) -> Dict:
                             if task_assignments[task['id']] < task_frequency[task['id']]:
                                 candidate_tasks.append((task, 3, cat))  # (task, priority, category)
             
-            # Medium priority vazifalar (kuniga 1-2 ta)
-            if daily_priority_count[2] < 2:
+            # Medium priority vazifalar (pattern bo'yicha limit)
+            if daily_priority_count[2] < daily_pattern[2]:
                 for cat, cat_tasks in medium_by_cat.items():
                     if daily_categories_used.count(cat) < 2:
                         for task in cat_tasks:
                             if task_assignments[task['id']] < task_frequency[task['id']]:
                                 candidate_tasks.append((task, 2, cat))
             
-            # Low priority vazifalar (kuniga 0-1 ta)
-            if daily_priority_count[1] < 1:
+            # Low priority vazifalar (pattern bo'yicha limit)
+            if daily_priority_count[1] < daily_pattern[1]:
                 for cat, cat_tasks in low_by_cat.items():
-                    if daily_categories_used.count(cat) < 1:
+                    if daily_categories_used.count(cat) < 2:
                         for task in cat_tasks:
                             if task_assignments[task['id']] < task_frequency[task['id']]:
                                 candidate_tasks.append((task, 1, cat))
