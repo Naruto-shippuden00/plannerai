@@ -280,23 +280,22 @@ async def add_user(user_id: int, username: str, full_name: str):
 
 async def add_task(user_id: int, task_name: str, category: str, priority: int = 1, duration: int = 60, is_urgent: bool = False, is_important: bool = False):
     """
-    Vazifa qo'shish - Eisenhower Matrix bilan
+    Vazifa qo'shish - Eisenhower Matrix ixtiyoriy
     
-    Eisenhower Quadrants:
-    - Q1 (Urgent + Important): Do First - Darhol qiling!
-    - Q2 (Not Urgent + Important): Schedule - Rejalashtiring
-    - Q3 (Urgent + Not Important): Delegate - Delegatsiya/Optimallashtiring
-    - Q4 (Not Urgent + Not Important): Eliminate - O'chiring/Kamayiring
+    Eisenhower parametrlari ixtiyoriy. Agar berilmasa, faqat priority ishlatiladi.
     """
-    # Eisenhower kvadrantini aniqlash
-    if is_urgent and is_important:
-        quadrant = "Q1"  # Do First
-    elif not is_urgent and is_important:
-        quadrant = "Q2"  # Schedule
-    elif is_urgent and not is_important:
-        quadrant = "Q3"  # Delegate
+    # Eisenhower kvadrantini aniqlash (agar berilgan bo'lsa)
+    if is_urgent or is_important:
+        if is_urgent and is_important:
+            quadrant = "Q1"  # Do First
+        elif not is_urgent and is_important:
+            quadrant = "Q2"  # Schedule
+        elif is_urgent and not is_important:
+            quadrant = "Q3"  # Delegate
+        else:
+            quadrant = "Q4"  # Eliminate
     else:
-        quadrant = "Q4"  # Eliminate
+        quadrant = None  # Eisenhower ishlatilmaydi
     
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute("""
