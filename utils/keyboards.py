@@ -60,12 +60,58 @@ def task_category_keyboard(language: str = "uz"):
     return keyboard
 
 def priority_keyboard(language: str = "uz"):
-    """Prioritet tanlash"""
+    """Prioritet tanlash - ESKISINI SAQLASH"""
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=get_text("priority_high", language), callback_data="priority_3")],
             [InlineKeyboardButton(text=get_text("priority_medium", language), callback_data="priority_2")],
             [InlineKeyboardButton(text=get_text("priority_low", language), callback_data="priority_1")]
+        ]
+    )
+    return keyboard
+
+def eisenhower_matrix_keyboard(language: str = "uz"):
+    """Eisenhower Matrix klaviaturasi"""
+    texts = {
+        "urgent_important": {
+            "uz": "🔴 Shoshilinch va Muhim\n(Darhol qiling!)",
+            "ru": "🔴 Срочное и Важное\n(Сделать немедленно!)",
+            "en": "🔴 Urgent & Important\n(Do First!)"
+        },
+        "not_urgent_important": {
+            "uz": "🟢 Shoshilinch emas, Muhim\n(Rejalashtiring)",
+            "ru": "🟢 Не срочное, но Важное\n(Запланировать)",
+            "en": "🟢 Not Urgent but Important\n(Schedule)"
+        },
+        "urgent_not_important": {
+            "uz": "🟡 Shoshilinch, Muhim emas\n(Delegatsiya/Optimallashtirish)",
+            "ru": "🟡 Срочное, но не Важное\n(Делегировать/Оптимизировать)",
+            "en": "🟡 Urgent but Not Important\n(Delegate/Optimize)"
+        },
+        "not_urgent_not_important": {
+            "uz": "⚪️ Shoshilinch emas, Muhim emas\n(Kamaytirib yuborish)",
+            "ru": "⚪️ Не срочное и не Важное\n(Минимизировать)",
+            "en": "⚪️ Not Urgent & Not Important\n(Eliminate)"
+        },
+        "what_is": {
+            "uz": "❓ Eisenhower Matrix nima?",
+            "ru": "❓ Что такое Eisenhower Matrix?",
+            "en": "❓ What is Eisenhower Matrix?"
+        }
+    }
+    
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=texts["urgent_important"].get(language, texts["urgent_important"]["uz"]), 
+                                callback_data="eisenhower_Q1")],
+            [InlineKeyboardButton(text=texts["not_urgent_important"].get(language, texts["not_urgent_important"]["uz"]), 
+                                callback_data="eisenhower_Q2")],
+            [InlineKeyboardButton(text=texts["urgent_not_important"].get(language, texts["urgent_not_important"]["uz"]), 
+                                callback_data="eisenhower_Q3")],
+            [InlineKeyboardButton(text=texts["not_urgent_not_important"].get(language, texts["not_urgent_not_important"]["uz"]), 
+                                callback_data="eisenhower_Q4")],
+            [InlineKeyboardButton(text=texts["what_is"].get(language, texts["what_is"]["uz"]), 
+                                callback_data="eisenhower_info")]
         ]
     )
     return keyboard

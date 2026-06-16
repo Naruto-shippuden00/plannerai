@@ -25,11 +25,12 @@ async def show_statistics(message: Message):
     # Haftalik statistika
     stats = await get_weekly_stats(user_id)
     
-    if stats['total_scheduled'] == 0:
+    # Agar umuman vazifa bo'lmasa
+    if stats['total_tasks'] == 0 and stats['completed'] == 0:
         texts = {
-            "uz": "❌ **Statistika yo'q**\n\nAvval vazifalar qo'shing va jadval tuzing!\n\n1️⃣ ➕ Vazifa qo'shish\n2️⃣ 🤖 AI Jadval",
-            "ru": "❌ **Нет статистики**\n\nСначала добавьте задачи и создайте расписание!\n\n1️⃣ ➕ Добавить задачу\n2️⃣ 🤖 AI Расписание",
-            "en": "❌ **No statistics**\n\nFirst add tasks and create schedule!\n\n1️⃣ ➕ Add Task\n2️⃣ 🤖 AI Schedule"
+            "uz": "❌ **Statistika yo'q**\n\nAvval vazifalar qo'shing!\n\n1️⃣ ➕ Vazifa qo'shish\n2️⃣ 🤖 AI Jadval",
+            "ru": "❌ **Нет статистики**\n\nСначала добавьте задачи!\n\n1️⃣ ➕ Добавить задачу\n2️⃣ 🤖 AI Расписание",
+            "en": "❌ **No statistics**\n\nFirst add tasks!\n\n1️⃣ ➕ Add Task\n2️⃣ 🤖 AI Schedule"
         }
         await message.answer(
             texts.get(user_lang, texts["uz"]),
@@ -41,7 +42,9 @@ async def show_statistics(message: Message):
     # Matn statistika
     completion_rate = stats['completion_rate']
     completed = stats['completed']
-    total = stats['total_scheduled']
+    total_tasks = stats['total_tasks']
+    scheduled_tasks = stats['total_scheduled']
+    expected = stats['expected_completions']
     
     # Progress bar
     progress_bar = create_progress_bar(completion_rate)
@@ -69,7 +72,9 @@ async def show_statistics(message: Message):
 ━━━━━━━━━━━━━━━━━━━━
 📈 **Umumiy natijalar:**
 
-✅ Bajarildi: {completed} / {total} ta
+📝 Jami vazifalar: {total_tasks} ta
+📅 Rejalashtirilgan: {scheduled_tasks} ta
+✅ Bajarildi: {completed} / {expected} ta
 {progress_bar} {completion_rate:.1f}%
 
 ━━━━━━━━━━━━━━━━━━━━

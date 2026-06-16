@@ -95,27 +95,222 @@ async def add_task_category(callback: CallbackQuery, state: FSMContext):
     await state.update_data(category=category)
     await state.set_state(AddTaskState.waiting_for_priority)
     
-    texts = {
-        "uz": f"📂 Kategoriya: **{category}**\n\nPrioritetni tanlang:",
-        "ru": f"📂 Категория: **{category}**\n\nВыберите приоритет:",
-        "en": f"📂 Category: **{category}**\n\nSelect priority:"
+    info_texts = {
+        "uz": f"📂 Kategoriya: **{category}**\n\n🎯 **Eisenhower Matrix** yordamida prioritetni aniqlang:\n\n🔴 **Q1 - Shoshilinch va Muhim**\nMisol: Imtihon ertaga, urgent bug fix\n\n🟢 **Q2 - Muhim, lekin shoshilinch emas**\nMisol: Sport, o'qish, o'rganish\n\n🟡 **Q3 - Shoshilinch, lekin muhim emas**\nMisol: Ba'zi yig'ilishlar, telefonlar\n\n⚪️ **Q4 - Ikkalasi ham emas**\nMisol: Bep ishlash, ortiqcha ijtimoiy tarmoqlar\n\n❓ Ko'proq bilish uchun '❓ Eisenhower Matrix nima?' tugmasini bosing.",
+        "ru": f"📂 Категория: **{category}**\n\n🎯 Определите приоритет с помощью **Eisenhower Matrix**:\n\n🔴 **Q1 - Срочное и Важное**\nПример: Экзамен завтра, срочный bug fix\n\n🟢 **Q2 - Важное, но не срочное**\nПример: Спорт, чтение, обучение\n\n🟡 **Q3 - Срочное, но не важное**\nПример: Некоторые встречи, звонки\n\n⚪️ **Q4 - Ни то, ни другое**\nПример: Бесцельная работа, лишние соцсети\n\n❓ Нажмите '❓ Что такое Eisenhower Matrix?' для подробностей.",
+        "en": f"📂 Category: **{category}**\n\n🎯 Define priority using **Eisenhower Matrix**:\n\n🔴 **Q1 - Urgent & Important**\nExample: Exam tomorrow, urgent bug fix\n\n🟢 **Q2 - Important but Not Urgent**\nExample: Sports, reading, learning\n\n🟡 **Q3 - Urgent but Not Important**\nExample: Some meetings, phone calls\n\n⚪️ **Q4 - Neither**\nExample: Busy work, excessive social media\n\n❓ Click '❓ What is Eisenhower Matrix?' for details."
     }
     
+    # Eisenhower Matrix import qilish
+    from utils.keyboards import eisenhower_matrix_keyboard
+    
     await callback.message.edit_text(
-        texts.get(user_lang, texts["uz"]),
+        info_texts.get(user_lang, info_texts["uz"]),
         parse_mode="Markdown",
-        reply_markup=priority_keyboard(user_lang)
+        reply_markup=eisenhower_matrix_keyboard(user_lang)
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("eisenhower_"))
+async def eisenhower_matrix_select(callback: CallbackQuery, state: FSMContext):
+    """Eisenhower Matrix kvadrant tanlash"""
+    from utils.database import get_user_language
+    user_lang = await get_user_language(callback.from_user.id)
+    
+    quadrant = callback.data.split("_")[1]
+    
+    # Agar info so'ralsa
+    if quadrant == "info":
+        info_texts = {
+            "uz": """
+📊 **EISENHOWER MATRIX**
+
+Bu vazifalarni to'g'ri prioritetlash uchun eng mashhur usul!
+
+Prezident Eisenhower aytgan:
+_"Men ikkita muammo turiga duch kelaman: shoshilinch va muhim. Shoshilinch narsa muhim emas, muhim narsa esa kamdan-kam shoshilinch."_
+
+═══════════════════════
+
+🔴 **Q1 - SHOSHILINCH VA MUHIM**
+• Darhol qiling!
+• Misol: Crisis, deadline'lar, tibbiy muammo
+• Natija: Stress kamayadi
+
+🟢 **Q2 - MUHIM, LEKIN SHOSHILINCH EMAS**
+• YING IMPORTANT! Bu yerda o'sing!
+• Misol: Sport, o'qish, rejalashtirish, ilm o'rganish
+• Natija: Muvaffaqiyat, rivojlanish
+
+🟡 **Q3 - SHOSHILINCH, LEKIN MUHIM EMAS**
+• Delegatsiya yoki optimallashtiring
+• Misol: Ba'zi yig'ilishlar, telefonlar, emaillar
+• Natija: Vaqtni tejash
+
+⚪️ **Q4 - IKKALASI HAM EMAS**
+• Kamaytirib yuboring yoki o'chiring!
+• Misol: TV, ijtimoiy tarmoqlar, bep ish
+• Natija: Fokus ortadi
+
+═══════════════════════
+
+💡 **MASLAHAT:** 
+Q2 ga ko'proq vaqt ajrating - bu muvaffaqiyatning kaliti!
+""",
+            "ru": """
+📊 **EISENHOWER MATRIX**
+
+Это самый популярный метод правильной приоритизации!
+
+Президент Эйзенхауэр сказал:
+_"У меня есть два типа проблем: срочные и важные. Срочное не важно, а важное редко бывает срочным."_
+
+═══════════════════════
+
+🔴 **Q1 - СРОЧНОЕ И ВАЖНОЕ**
+• Делать немедленно!
+• Пример: Кризисы, дедлайны, медицинские проблемы
+• Результат: Снижение стресса
+
+🟢 **Q2 - ВАЖНОЕ, НО НЕ СРОЧНОЕ**
+• САМОЕ ВАЖНОЕ! Растите здесь!
+• Пример: Спорт, чтение, планирование, обучение
+• Результат: Успех, развитие
+
+🟡 **Q3 - СРОЧНОЕ, НО НЕ ВАЖНОЕ**
+• Делегировать или оптимизировать
+• Пример: Некоторые встречи, звонки, email'ы
+• Результат: Экономия времени
+
+⚪️ **Q4 - НИ ТО, НИ ДРУГОЕ**
+• Минимизировать или удалить!
+• Пример: ТВ, соцсети, бесцельная работа
+• Результат: Больше фокуса
+
+═══════════════════════
+
+💡 **СОВЕТ:** 
+Уделяйте больше времени Q2 - это ключ к успеху!
+""",
+            "en": """
+📊 **EISENHOWER MATRIX**
+
+This is the most popular method for proper prioritization!
+
+President Eisenhower said:
+_"I have two kinds of problems: the urgent and the important. The urgent are not important, and the important are never urgent."_
+
+═══════════════════════
+
+🔴 **Q1 - URGENT & IMPORTANT**
+• Do immediately!
+• Example: Crises, deadlines, medical issues
+• Result: Reduce stress
+
+🟢 **Q2 - IMPORTANT BUT NOT URGENT**
+• MOST IMPORTANT! Grow here!
+• Example: Exercise, reading, planning, learning
+• Result: Success, growth
+
+🟡 **Q3 - URGENT BUT NOT IMPORTANT**
+• Delegate or optimize
+• Example: Some meetings, phone calls, emails
+• Result: Save time
+
+⚪️ **Q4 - NEITHER**
+• Minimize or eliminate!
+• Example: TV, social media, busy work
+• Result: More focus
+
+═══════════════════════
+
+💡 **TIP:** 
+Spend more time in Q2 - it's the key to success!
+"""
+        }
+        
+        from utils.keyboards import eisenhower_matrix_keyboard
+        
+        await callback.message.edit_text(
+            info_texts.get(user_lang, info_texts["uz"]),
+            parse_mode="Markdown",
+            reply_markup=eisenhower_matrix_keyboard(user_lang)
+        )
+        await callback.answer()
+        return
+    
+    # Kvadrant tanlanganda
+    quadrant_mapping = {
+        "Q1": {"urgent": True, "important": True, "priority": 3},  # Do First
+        "Q2": {"urgent": False, "important": True, "priority": 3},  # Schedule - eng muhim!
+        "Q3": {"urgent": True, "important": False, "priority": 2},  # Delegate
+        "Q4": {"urgent": False, "important": False, "priority": 1}   # Eliminate
+    }
+    
+    selection = quadrant_mapping[quadrant]
+    await state.update_data(
+        is_urgent=selection["urgent"],
+        is_important=selection["important"],
+        priority=selection["priority"],
+        eisenhower_quadrant=quadrant
+    )
+    
+    await state.set_state(AddTaskState.waiting_for_duration)
+    
+    quadrant_names = {
+        "Q1": {
+            "uz": "🔴 Shoshilinch va Muhim (Darhol qiling!)",
+            "ru": "🔴 Срочное и Важное (Сделать немедленно!)",
+            "en": "🔴 Urgent & Important (Do First!)"
+        },
+        "Q2": {
+            "uz": "🟢 Muhim, lekin shoshilinch emas (Rejalashtiring)",
+            "ru": "🟢 Важное, но не срочное (Запланировать)",
+            "en": "🟢 Important but Not Urgent (Schedule)"
+        },
+        "Q3": {
+            "uz": "🟡 Shoshilinch, lekin muhim emas (Delegatsiya)",
+            "ru": "🟡 Срочное, но не важное (Делегировать)",
+            "en": "🟡 Urgent but Not Important (Delegate)"
+        },
+        "Q4": {
+            "uz": "⚪️ Ikkalasi ham emas (Kamaytirib yuboring)",
+            "ru": "⚪️ Ни то, ни другое (Минимизировать)",
+            "en": "⚪️ Neither (Eliminate)"
+        }
+    }
+    
+    duration_prompt = {
+        "uz": "⏱ Davomiylikni tanlang:",
+        "ru": "⏱ Выберите продолжительность:",
+        "en": "⏱ Select duration:"
+    }
+    
+    quadrant_text = quadrant_names[quadrant].get(user_lang, quadrant_names[quadrant]["uz"])
+    
+    await callback.message.edit_text(
+        f"✅ {quadrant_text}\n\n{duration_prompt.get(user_lang, duration_prompt['uz'])}",
+        parse_mode="Markdown",
+        reply_markup=duration_keyboard(user_lang)
     )
     await callback.answer()
 
 @router.callback_query(F.data.startswith("priority_"))
 async def add_task_priority(callback: CallbackQuery, state: FSMContext):
-    """Prioritet tanlash"""
+    """Prioritet tanlash - ESKI USUL (backward compatibility uchun)"""
     from utils.database import get_user_language
     user_lang = await get_user_language(callback.from_user.id)
     
     priority = int(callback.data.split("_")[1])
-    await state.update_data(priority=priority)
+    
+    # Eski usulda priority tanlansa, default qiymatlar
+    await state.update_data(
+        priority=priority,
+        is_urgent=False,
+        is_important=(priority == 3),
+        eisenhower_quadrant="Q3"
+    )
+    
     await state.set_state(AddTaskState.waiting_for_duration)
     
     priority_texts = {
@@ -165,21 +360,34 @@ async def add_task_duration(callback: CallbackQuery, state: FSMContext):
     duration = int(callback.data.split("_")[1])
     data = await state.get_data()
     
-    # Vazifani saqlash
+    # Vazifani saqlash - Eisenhower Matrix bilan
     task_id = await add_task(
         user_id=callback.from_user.id,
         task_name=data['task_name'],
         category=data['category'],
-        priority=data['priority'],
-        duration=duration
+        priority=data.get('priority', 2),
+        duration=duration,
+        is_urgent=data.get('is_urgent', False),
+        is_important=data.get('is_important', False)
     )
+    
+    quadrant = data.get('eisenhower_quadrant', 'Q3')
     
     await state.clear()
     
+    quadrant_info = {
+        "Q1": {"uz": "🔴 Q1 - Darhol bajarish!", "ru": "🔴 Q1 - Срочно!", "en": "🔴 Q1 - Do First!"},
+        "Q2": {"uz": "🟢 Q2 - Rejalashtiring (eng muhim!)", "ru": "🟢 Q2 - Запланировать (самое важное!)", "en": "🟢 Q2 - Schedule (most important!)"},
+        "Q3": {"uz": "🟡 Q3 - Delegatsiya/Optimallashtirish", "ru": "🟡 Q3 - Делегировать/Оптимизировать", "en": "🟡 Q3 - Delegate/Optimize"},
+        "Q4": {"uz": "⚪️ Q4 - Kamaytirib yuboring", "ru": "⚪️ Q4 - Минимизировать", "en": "⚪️ Q4 - Eliminate"}
+    }
+    
+    q_text = quadrant_info.get(quadrant, quadrant_info["Q3"]).get(user_lang, quadrant_info[quadrant]["uz"])
+    
     success_texts = {
-        "uz": f"✅ **VAZIFA MUVAFFAQIYATLI QO'SHILDI!**\n\n📝 Nomi: **{data['task_name']}**\n📂 Kategoriya: {data['category']}\n⭐ Prioritet: {data['priority']}/3\n⏱ Davomiyligi: {duration} daqiqa\n\n═══════════════════════\n\n🎯 **KEYINGI QADAMLAR:**\n\n1️⃣ Yana vazifa qo'shing (ixtiyoriy)\n2️⃣ **'🤖 AI Jadval'** tugmasini bosing\n3️⃣ AI optimal jadval tuzadi\n4️⃣ Jadvalni tasdiqlang\n\n⏰ **KEYIN AVTOMATIK:**\n• Vazifa vaqti kelganda bildirishnoma\n• Har 5 daqiqada eslatma (rasm yuborguningizcha)\n• Rasm yuborish → Pomodoro timer\n• {duration} daqiqa fokusda ishlash\n• 10 daqiqa tanaffus\n• Keyingi vazifa avtomatik boshlanadi\n\n💪 **100% avtomatik nazorat!**",
-        "ru": f"✅ **ЗАДАЧА УСПЕШНО ДОБАВЛЕНА!**\n\n📝 Название: **{data['task_name']}**\n📂 Категория: {data['category']}\n⭐ Приоритет: {data['priority']}/3\n⏱ Продолжительность: {duration} минут\n\n═══════════════════════\n\n🎯 **СЛЕДУЮЩИЕ ШАГИ:**\n\n1️⃣ Добавьте еще задачи (опционально)\n2️⃣ Нажмите **'🤖 AI Расписание'**\n3️⃣ AI создаст оптимальное расписание\n4️⃣ Подтвердите расписание\n\n⏰ **ЗАТЕМ АВТОМАТИЧЕСКИ:**\n• Уведомление при наступлении времени\n• Напоминания каждые 5 минут (пока не отправите фото)\n• Отправка фото → Pomodoro таймер\n• {duration} минут в фокусе\n• 10 минут перерыв\n• Следующая задача запускается автоматически\n\n💪 **100% автоматический контроль!**",
-        "en": f"✅ **TASK SUCCESSFULLY ADDED!**\n\n📝 Name: **{data['task_name']}**\n📂 Category: {data['category']}\n⭐ Priority: {data['priority']}/3\n⏱ Duration: {duration} minutes\n\n═══════════════════════\n\n🎯 **NEXT STEPS:**\n\n1️⃣ Add more tasks (optional)\n2️⃣ Click **'🤖 AI Schedule'** button\n3️⃣ AI creates optimal schedule\n4️⃣ Confirm schedule\n\n⏰ **THEN AUTOMATICALLY:**\n• Notification when task time comes\n• Reminders every 5 minutes (until you send photo)\n• Send photo → Pomodoro timer\n• {duration} minutes in focus\n• 10 minute break\n• Next task starts automatically\n\n💪 **100% automatic control!**"
+        "uz": f"✅ **VAZIFA MUVAFFAQIYATLI QO'SHILDI!**\n\n📝 Nomi: **{data['task_name']}**\n📂 Kategoriya: {data['category']}\n⭐ Eisenhower: {q_text}\n⏱ Davomiyligi: {duration} daqiqa\n\n═══════════════════════\n\n🎯 **KEYINGI QADAMLAR:**\n\n1️⃣ Yana vazifa qo'shing (ixtiyoriy)\n2️⃣ **'🤖 AI Jadval'** tugmasini bosing\n3️⃣ AI optimal jadval tuzadi\n4️⃣ Jadvalni tasdiqlang\n\n⏰ **KEYIN AVTOMATIK:**\n• Vazifa vaqti kelganda bildirishnoma\n• Har 5 daqiqada eslatma (rasm yuborguningizcha)\n• Rasm yuborish → Pomodoro timer\n• {duration} daqiqa fokusda ishlash\n• 10 daqiqa tanaffus\n• Keyingi vazifa avtomatik boshlanadi\n\n💪 **100% avtomatik nazorat!**",
+        "ru": f"✅ **ЗАДАЧА УСПЕШНО ДОБАВЛЕНА!**\n\n📝 Название: **{data['task_name']}**\n📂 Категория: {data['category']}\n⭐ Eisenhower: {q_text}\n⏱ Продолжительность: {duration} минут\n\n═══════════════════════\n\n🎯 **СЛЕДУЮЩИЕ ШАГИ:**\n\n1️⃣ Добавьте еще задачи (опционально)\n2️⃣ Нажмите **'🤖 AI Расписание'**\n3️⃣ AI создаст оптимальное расписание\n4️⃣ Подтвердите расписание\n\n⏰ **ЗАТЕМ АВТОМАТИЧЕСКИ:**\n• Уведомление при наступлении времени\n• Напоминания каждые 5 минут (пока не отправите фото)\n• Отправка фото → Pomodoro таймер\n• {duration} минут в фокусе\n• 10 минут перерыв\n• Следующая задача запускается автоматически\n\n💪 **100% автоматический контроль!**",
+        "en": f"✅ **TASK SUCCESSFULLY ADDED!**\n\n📝 Name: **{data['task_name']}**\n📂 Category: {data['category']}\n⭐ Eisenhower: {q_text}\n⏱ Duration: {duration} minutes\n\n═══════════════════════\n\n🎯 **NEXT STEPS:**\n\n1️⃣ Add more tasks (optional)\n2️⃣ Click **'🤖 AI Schedule'** button\n3️⃣ AI creates optimal schedule\n4️⃣ Confirm schedule\n\n⏰ **THEN AUTOMATICALLY:**\n• Notification when task time comes\n• Reminders every 5 minutes (until you send photo)\n• Send photo → Pomodoro timer\n• {duration} minutes in focus\n• 10 minute break\n• Next task starts automatically\n\n💪 **100% automatic control!**"
     }
     
     next_prompts = {
@@ -218,22 +426,37 @@ async def add_task_custom_duration(message: Message, state: FSMContext):
         
         data = await state.get_data()
         
-        # Vazifani saqlash
+        # Vazifani saqlash - Eisenhower Matrix bilan
         task_id = await add_task(
             user_id=message.from_user.id,
             task_name=data['task_name'],
             category=data['category'],
-            priority=data['priority'],
-            duration=duration
+            priority=data.get('priority', 2),
+            duration=duration,
+            is_urgent=data.get('is_urgent', False),
+            is_important=data.get('is_important', False)
         )
         
+        quadrant = data.get('eisenhower_quadrant', 'Q3')
+        
         await state.clear()
+        
+        quadrant_info = {
+            "Q1": {"uz": "🔴 Q1 - Darhol!", "ru": "🔴 Q1 - Срочно!", "en": "🔴 Q1 - Do First!"},
+            "Q2": {"uz": "🟢 Q2 - Rejalashtiring", "ru": "🟢 Q2 - Запланировать", "en": "🟢 Q2 - Schedule"},
+            "Q3": {"uz": "🟡 Q3 - Delegatsiya", "ru": "🟡 Q3 - Делегировать", "en": "🟡 Q3 - Delegate"},
+            "Q4": {"uz": "⚪️ Q4 - Kamaytirib yuboring", "ru": "⚪️ Q4 - Минимизировать", "en": "⚪️ Q4 - Eliminate"}
+        }
+        
+        from utils.database import get_user_language
+        user_lang = await get_user_language(message.from_user.id)
+        q_text = quadrant_info.get(quadrant, quadrant_info["Q3"]).get(user_lang, quadrant_info[quadrant]["uz"])
         
         await message.answer(
             f"✅ **VAZIFA MUVAFFAQIYATLI QO'SHILDI!**\n\n"
             f"📝 Nomi: **{data['task_name']}**\n"
             f"📂 Kategoriya: {data['category']}\n"
-            f"⭐ Prioritet: {data['priority']}/3\n"
+            f"⭐ Eisenhower: {q_text}\n"
             f"⏱ Davomiyligi: {duration} daqiqa\n\n"
             f"═══════════════════════\n\n"
             f"🎯 **KEYINGI QADAMLAR:**\n\n"
@@ -243,7 +466,7 @@ async def add_task_custom_duration(message: Message, state: FSMContext):
             f"4️⃣ Jadvalni tasdiqlang\n\n"
             f"💪 **100% avtomatik nazorat!**",
             parse_mode="Markdown",
-            reply_markup=main_menu_keyboard()
+            reply_markup=main_menu_keyboard(user_lang)
         )
         
     except ValueError:
@@ -306,8 +529,17 @@ async def show_tasks(message: Message):
         text += f"\n{emoji} **{category}**\n"
         
         for task in cat_tasks:
-            priority_emoji = "🔴" if task['priority'] == 3 else "🟡" if task['priority'] == 2 else "🟢"
-            text += f"  {priority_emoji} {task['task_name']} ({task['duration_minutes']} min)\n"
+            # Eisenhower kvadrant emoji
+            quadrant = task.get('eisenhower_quadrant', 'Q3')
+            quadrant_emoji = {
+                "Q1": "🔴",  # Urgent + Important
+                "Q2": "🟢",  # Important but Not Urgent
+                "Q3": "🟡",  # Urgent but Not Important
+                "Q4": "⚪️"   # Neither
+            }
+            q_emoji = quadrant_emoji.get(quadrant, "🟡")
+            
+            text += f"  {q_emoji} {task['task_name']} ({task['duration_minutes']} min)\n"
     
     footer_texts = {
         "uz": f"\n\n📊 Jami: {len(tasks)} ta vazifa\n\n💡 Vazifani boshqarish uchun quyidagi tugmalarni bosing:",
@@ -320,16 +552,18 @@ async def show_tasks(message: Message):
     
     # Har bir vazifa uchun alohida boshqaruv tugmalari
     for task in tasks:
+        quadrant = task.get('eisenhower_quadrant', 'Q3')
+        quadrant_names = {
+            "Q1": {"uz": "🔴 Darhol!", "ru": "🔴 Срочно!", "en": "🔴 Do First!"},
+            "Q2": {"uz": "🟢 Rejalashtiring", "ru": "🟢 Запланировать", "en": "🟢 Schedule"},
+            "Q3": {"uz": "🟡 Delegatsiya", "ru": "🟡 Делегировать", "en": "🟡 Delegate"},
+            "Q4": {"uz": "⚪️ Kamaytiring", "ru": "⚪️ Минимизировать", "en": "⚪️ Eliminate"}
+        }
+        q_text = quadrant_names.get(quadrant, quadrant_names["Q3"]).get(user_lang, quadrant_names[quadrant]["uz"])
+        
         task_text = f"📝 **{task['task_name']}**\n"
         task_text += f"📂 {task['category']} | ⏱ {task['duration_minutes']} min\n"
-        
-        priority_texts = {
-            "uz": {"3": "🔴 Juda muhim", "2": "🟡 O'rtacha", "1": "🟢 Past"},
-            "ru": {"3": "🔴 Очень важно", "2": "🟡 Средне", "1": "🟢 Низкий"},
-            "en": {"3": "🔴 Very important", "2": "🟡 Medium", "1": "🟢 Low"}
-        }
-        priority_text = priority_texts.get(user_lang, priority_texts["uz"])[str(task['priority'])]
-        task_text += f"⭐ {priority_text}"
+        task_text += f"⭐ {q_text}"
         
         await message.answer(
             task_text,

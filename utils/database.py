@@ -53,6 +53,9 @@ async def init_db():
                 task_name TEXT NOT NULL,
                 category TEXT NOT NULL,
                 priority INTEGER DEFAULT 1,
+                eisenhower_quadrant TEXT DEFAULT 'Q3',
+                is_urgent INTEGER DEFAULT 0,
+                is_important INTEGER DEFAULT 0,
                 duration_minutes INTEGER DEFAULT 60,
                 active INTEGER DEFAULT 1,
                 completed INTEGER DEFAULT 0,
@@ -275,13 +278,38 @@ async def add_user(user_id: int, username: str, full_name: str):
         """, (user_id, username, full_name, datetime.now(TASHKENT_TZ).isoformat()))
         await db.commit()
 
-async def add_task(user_id: int, task_name: str, category: str, priority: int = 1, duration: int = 60):
-    """Vazifa qo'shish"""
+async def add_task(user_id: int, task_name: str, category: str, priority: int = 1, duration: int = 60, is_urgent: bool = False, is_important: bool = False):
+    """
+    Vazifa qo'shish - Eisenhower Matrix bilan
+    
+    Eisenhower Quadrants:
+    - Q1 (Urgent + Important): Do First - Darhol qiling!
+    - Q2 (Not Urgent + Important): Schedule - Rejalashtiring
+    - Q3 (Urgent + Not Important): Delegate - Delegatsiya/Optimallashtiring
+    - Q4 (Not Urgent + Not Important): Eliminate - O'chiring/Kamayiring
+    """
+    # Eisenhower kvadrantini aniqlash
+    if is_urgent and is_important:
+        quadrant = "Q1"  # Do First
+    elif not is_urgent and is_important:
+        quadrant = "Q2"  # Schedule
+    elif is_urgent and not is_important:
+        quadrant = "Q3"  # Delegate
+    else:
+        quadrant = "Q4"  # Eliminate
+    
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute("""
-            INSERT INTO tasks (user_id, task_name, category, priority, duration_minutes, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (user_id, task_name, category, priority, duration, datetime.now(TASHKENT_TZ).isoformat()))
+            INSERT INTO tasks (
+                user_id, task_name, category, priority, duration_minutes, 
+                eisenhower_quadrant, is_urgent, is_important, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            user_id, task_name, category, priority, duration, 
+            quadrant, int(is_urgent), int(is_important), 
+            datetime.now(TASHKENT_TZ).isoformat()
+        ))
         await db.commit()
         return cursor.lastrowid
 
@@ -346,25 +374,35 @@ async def mark_task_completed(user_id: int, task_id: int, scheduled_time: str, p
         await db.commit()
 
 async def get_weekly_stats(user_id: int, week_start: Optional[datetime] = None) -> Dict:
-    """Haftalik statistika olish"""
+    """Haftalik statistika olish - FIXED: Barcha vazifalarni hisoblaydi"""
     if week_start is None:
-        week_start = datetime.now() - timedelta(days=datetime.now().weekday())
+        week_start = datetime.now(TASHKENT_TZ) - timedelta(days=datetime.now().weekday())
     
     week_end = week_start + timedelta(days=7)
     
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         
-        # Jami rejalashtirilgan vazifalar
+        # Jami aktiv vazifalar (schedule bo'lsin yoki bo'lmasin)
         async with db.execute("""
             SELECT COUNT(*) as total
-            FROM schedule s
-            WHERE s.user_id = ? AND s.active = 1
+            FROM tasks
+            WHERE user_id = ? AND active = 1 AND completed = 0
         """, (user_id,)) as cursor:
             row = await cursor.fetchone()
-            total_scheduled = row['total'] * 7  # Haftalik
+            total_tasks = row['total']
         
-        # Bajarilgan vazifalar
+        # Rejalashtirilgan vazifalar (schedule mavjud)
+        async with db.execute("""
+            SELECT COUNT(DISTINCT t.id) as total
+            FROM tasks t
+            INNER JOIN schedule s ON t.id = s.task_id
+            WHERE t.user_id = ? AND t.active = 1 AND t.completed = 0 AND s.active = 1
+        """, (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            scheduled_tasks = row['total']
+        
+        # Bajarilgan vazifalar (haftalik)
         async with db.execute("""
             SELECT COUNT(*) as completed
             FROM completions
@@ -375,7 +413,7 @@ async def get_weekly_stats(user_id: int, week_start: Optional[datetime] = None) 
             row = await cursor.fetchone()
             completed = row['completed']
         
-        # Kategoriya bo'yicha
+        # Kategoriya bo'yicha (haftalik)
         async with db.execute("""
             SELECT t.category, COUNT(*) as count
             FROM completions c
@@ -388,10 +426,16 @@ async def get_weekly_stats(user_id: int, week_start: Optional[datetime] = None) 
             rows = await cursor.fetchall()
             by_category = {row['category']: row['count'] for row in rows}
         
+        # Agar jadval mavjud bo'lsa, haftalik maqsad hisoblanadi
+        # Aks holda, faqat bajarilgan vazifalar ko'rsatiladi
+        expected_completions = scheduled_tasks * 7 if scheduled_tasks > 0 else completed
+        
         return {
-            'total_scheduled': total_scheduled,
+            'total_tasks': total_tasks,
+            'total_scheduled': scheduled_tasks,
+            'expected_completions': expected_completions,
             'completed': completed,
-            'completion_rate': (completed / total_scheduled * 100) if total_scheduled > 0 else 0,
+            'completion_rate': (completed / expected_completions * 100) if expected_completions > 0 else 0,
             'by_category': by_category
         }
 
@@ -660,6 +704,16 @@ async def migrate_existing_users():
                 
                 if 'times_completed' not in column_names:
                     migrations.append("ALTER TABLE tasks ADD COLUMN times_completed INTEGER DEFAULT 0")
+                
+                # Eisenhower Matrix ustunlari
+                if 'eisenhower_quadrant' not in column_names:
+                    migrations.append("ALTER TABLE tasks ADD COLUMN eisenhower_quadrant TEXT DEFAULT 'Q3'")
+                
+                if 'is_urgent' not in column_names:
+                    migrations.append("ALTER TABLE tasks ADD COLUMN is_urgent INTEGER DEFAULT 0")
+                
+                if 'is_important' not in column_names:
+                    migrations.append("ALTER TABLE tasks ADD COLUMN is_important INTEGER DEFAULT 0")
                 
                 for migration in migrations:
                     await db.execute(migration)
